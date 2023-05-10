@@ -1,0 +1,5 @@
+# conda environment folder
+envs/
+
+# jupyter notebook for quick snippets etc.
+sketchpad.ipynb
