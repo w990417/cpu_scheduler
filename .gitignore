@@ -4,5 +4,8 @@ envs/
 # jupyter notebook for quick snippets etc.
 sketchpad.ipynb
 
+# .vscode
+.vscode/
+
 # .exe
 *.exe
