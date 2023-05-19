@@ -1,6 +1,8 @@
-#include "stdio.h"
-#include "stdlib.h"
-#include "stdbool.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+
+#include "cpu_scheduler.h"
 
 // global constants
 #define MAX_PROCESS 5
@@ -16,63 +18,17 @@
 // global time variables
 int TICK = 0; // current time
 
-/* STRUCTS
-Status: keeps track of processes and their states
-Process: holds information about a process
-Config: keeps track of current configuration
- */
-
-
-typedef struct {
-    int process_cnt;        // initialised to 0
-    int pids[MAX_PROCESS];  // initialised to -1
-}Status;
-
-
-typedef struct {
-    // initial data
-    int pid;             // 1001 ~ 9999
-    int state;           // 0=new, 1=ready, 2=running, 3=waiting, 4=terminated
-    int priority;        // 1~MAX_PRIORITY=4 where 1 is the highest priority and default is 3
-    int cpu_burst_init;  // remaining cpu burst
-    int io_burst_init;   // remaining io burst
-    int arrival_time;    // 0 ~ MAX_ARRIVAL_TIME, default is global process_cnt
-    
-    // for evaluation()
-    int ready_wait_time;
-    int io_wait_time;
-    int total_wait_time;
-    int turnaround_time;
-    int finish_time;
-}Process;
-
-
-
-typedef struct{
-    bool rand_pid;      // false: (default) increments from 1001
-                        // true: random (1001 ~ 9999)
-    bool rand_arrival;  // false: (default) increments from 0
-                        // true: random (0 ~ MAX_ARRIVAL_TIME)
-    bool rand_priority; // false: (default) priority is fixed to DEFAULT_PRIORITY for all processes
-                        // true: priority is random (0 ~ MAX_PRIORITY)
-    bool rand_cpu_burst;// false: (default) fixed to DEFAULT_CPU_BURST for all processes
-                        // true: random (1 ~ MAX_CPU_BURST)
-    bool rand_io_burst; // false: (default) fixed to DEFAULT_IO_BURST for all processes                   
-}Config;
-
-
-// global instance of Status
-Status status = {0 , {-1}}; // {process_cnt, pids[]}
-// global instance of Config
-Config cfg={true, true, false, true, true}; // {rand_pid,  rand_arrival, rand_priority, rand_cpu_burst, rand_io_burst}
-
+// global struct instances TODO: function to initialise structs with custom/default values
+Config cfg={true, true, true, true, true}; // {rand_pid,  rand_arrival, rand_priority, rand_cpu_burst, rand_io_burst}
+// rand_pid=false is currently not implemented
 
 // FUNCTIONS //
+
 Process* _create_process(Config *cfg){
     Process *new_process = (Process*) malloc(sizeof(Process));
     
     // set pid
-    new_process->pid = cfg->rand_pid ? rand()%8999 + 1001 : 1001 + status.process_cnt;
+    new_process->pid = rand()%8999 + 1001;   // rand_pid=false is currently not implemented
     // set arrival time
     new_process->arrival_time = cfg->rand_arrival ? rand()%MAX_ARRIVAL_TIME + 1 : 0;
     // set priority
@@ -81,26 +37,29 @@ Process* _create_process(Config *cfg){
     new_process->cpu_burst_init = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
     // set I/O burst (total)
     new_process->io_burst_init = cfg->rand_io_burst ? rand()%MAX_IO_BURST + 1 : DEFAULT_IO_BURST;
-    // add to ready queue if arrival_time <= TICK
-    if (new_process->arrival_time <= TICK){
-        new_process->state = 1;
-        to_ready(); // add to ready queue
-    } else {
-        new_process->state = 0;
-        to_new(); // add to new queue
-    }
+    // set state
+    new_process->state = 0;
 
-    // update status
-    status.process_cnt++;
-    status.pids[status.process_cnt-1] = new_process->pid;
+
+    // time related attributes are initialised to -1
+    new_process->ready_wait_time = -1;
+    new_process->io_wait_time = -1;
+    new_process->total_wait_time = -1;
+    new_process->turnaround_time = -1;
+    new_process->finish_time = -1;
 
     return new_process; // return pointer to new process
 }
 
-// prints process attributes (except time related attributes)
-void process_info(Process* p){
 
-    // equivalent to python print(f"[{pid}]", '\n', '='*10, sep='')
+void _enqueue(Queue *q, Process *p, int priority){
+
+}
+
+
+
+void print_process_info(Process* p){
+    // prints process attributes (except time related attributes for evaluation)
     printf("[%d]\n==========\n", p->pid);
     switch (p->state) {
         case 0:
@@ -129,16 +88,22 @@ void process_info(Process* p){
 }
 
 
-
-
 int main(){
-    // test _create_process()
-    Process *p = _create_process(&cfg);
-    process_info(p);
+    srand(99);
+    
+    int p_cnt = 0; // number of processes in job pool
 
-    Process *p2 = _create_process(&cfg);
-    process_info(p2);
+    Process* job_pool[MAX_PROCESS];
 
-    return 0;
+    for(int i=0; i<MAX_PROCESS; i++){
+        job_pool[i] = _create_process(&cfg);
+        print_process_info(job_pool[i]);
+        p_cnt++;
+    }
+
+
+
+
+    return p_cnt;
 }
 
