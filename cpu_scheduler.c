@@ -21,20 +21,18 @@ int CLK;
 
 // FUNCTIONS //
 
-Process* create_process(Config *cfg){
-    /* Creates a number of processes as specified and returns pointer to the job pool */
+Process** create_process(Config *cfg){
+    /* 
+    Creates a number of processes as specified and returns a job pool */
     
-    int num_process = cfg->num_process;
-    Process *job_pool = (Process*) malloc(sizeof(Process)*num_process);
-    if (job_pool == NULL){
-        printf("ERROR: job_pool malloc failed @create_process()\n");
-        return NULL;
+    int count = cfg->num_process;
+    Process **job_pool = (Process**) malloc(sizeof(Process*)*count);
+    
+    // create processes and store them in job_pool
+    for(int i=0; i<count; i++){
+        job_pool[i] = _create_process(cfg);
     }
-
-    for(int i=0; i<num_process; i++){
-        job_pool[i] = *_create_process(cfg);
-    }
-
+    
     return job_pool;
 }
 
@@ -195,7 +193,7 @@ void print_queue(Queue *q){
 
 
 int main(){
-    // set test cfg
+    // set test init
     Config cfg = {
         .rand_pid = true,
         .rand_arrival = true,
@@ -208,21 +206,30 @@ int main(){
     srand(99);
     
 
-    
-    Queue *ready_q = create_queue(0);
+    // create empty ready_q
+    Queue* ready_q = create_queue(0);
+    // create processes
+    Process** job_pool = create_process(&cfg);
 
+    // print process info
+    for(int i=0; i<cfg.num_process; i++){
+        print_process_info(job_pool[i]);
+    }
+
+    // loop
     while(CLK < MAX_TIME){
+        // add processes that arrived to ready_queue
         for(int i=0; i<cfg.num_process; i++){
-            if(job_pool[i].arrival_time <= CLK){
-                enqueue(ready_q, &job_pool[i]);
+            if(job_pool[i]->arrival_time == CLK){
+                job_pool[i]->state = 1; // ready
+                enqueue(ready_q, job_pool[i]);
+                printf("[%d] added %d to ready queue\n", CLK, job_pool[i]->pid);
             }
         }
         CLK++;
     }
 
-    
-
-
+    print_queue(ready_q);
 
     return 99;
 }
