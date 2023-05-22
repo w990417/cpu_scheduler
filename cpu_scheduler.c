@@ -5,7 +5,7 @@
 #include "cpu_scheduler.h"
 
 // global constants
-#define MAX_PROCESS 5
+#define MAX_PROCESS 20
 #define MAX_ARRIVAL_TIME 20
 #define MAX_PRIORITY 4
 #define DEFAULT_PRIORITY 0
@@ -14,11 +14,29 @@
 #define MAX_IO_BURST 5
 #define DEFAULT_IO_BURST 2
 
+#define MAX_TIME 100
 // global clock variable
 int CLK;
 
 
 // FUNCTIONS //
+
+Process* create_process(Config *cfg){
+    /* Creates a number of processes as specified and returns pointer to the job pool */
+    
+    int num_process = cfg->num_process;
+    Process *job_pool = (Process*) malloc(sizeof(Process)*num_process);
+    if (job_pool == NULL){
+        printf("ERROR: job_pool malloc failed @create_process()\n");
+        return NULL;
+    }
+
+    for(int i=0; i<num_process; i++){
+        job_pool[i] = *_create_process(cfg);
+    }
+
+    return job_pool;
+}
 
 Process* _create_process(Config *cfg){
     /* 
@@ -73,7 +91,15 @@ Process* _create_process(Config *cfg){
 }
 
 Queue* create_queue(int priority){
-    /*Create a Queue*/
+    /*
+    Create a Queue
+    
+    Parameters
+    ----------
+    int priority: priority of the queue (1~4)
+        if priority is 0, the queue does not use priority (FCFS)
+    
+    */
     Queue *new_queue = (Queue*)malloc(sizeof(Queue));
     new_queue->head = NULL;
     new_queue->tail = NULL;
@@ -142,7 +168,7 @@ void print_process_info(Process* p){
     printf("Priority: %d\n", p->priority);
     printf("CPU Burst Time: %d\n", p->cpu_burst_init);
     printf("I/O Burst_Time: %d\n", p->io_burst_init);
-    printf("Arrival_time: %d\n", p->arrival_time);
+    printf("Arrival_time: %d\n\n", p->arrival_time);
 }
 
 
@@ -164,46 +190,40 @@ void print_queue(Queue *q){
         printf("[%d] -->", curr->p->pid);
         curr = curr->right;
     }
-    printf("NULL\n");
+    printf("NULL\n\n");
 }
 
 
 int main(){
-    
-    
     // set test cfg
     Config cfg = {
         .rand_pid = true,
         .rand_arrival = true,
         .rand_priority = false,
         .rand_cpu_burst = true,
-        .rand_io_burst = true
+        .rand_io_burst = true,
+        .num_process = 10
     };
     CLK = 0;
     srand(99);
     
-    // job pool is a simple array of pointers to processes for now
-    Process* job_pool[MAX_PROCESS];
-    int p_cnt = 0; // number of processes in job pool
 
-    // create processess
-    for(int i=0; i<MAX_PROCESS; i++){
-        job_pool[i] = _create_process(&cfg);
-        print_process_info(job_pool[i]);
-        p_cnt++;
+    
+    Queue *ready_q = create_queue(0);
+
+    while(CLK < MAX_TIME){
+        for(int i=0; i<cfg.num_process; i++){
+            if(job_pool[i].arrival_time <= CLK){
+                enqueue(ready_q, &job_pool[i]);
+            }
+        }
+        CLK++;
     }
 
-    // queue test
-    Queue* test_queue = create_queue(0);
-    for(int i=0; i<MAX_PROCESS; i++){
-        enqueue(test_queue, job_pool[i]);
-    }
-
-    // print queue
-    print_queue(test_queue);
+    
 
 
 
-    return p_cnt;
+    return 99;
 }
 

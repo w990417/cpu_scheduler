@@ -16,7 +16,7 @@ Config: keeps track of current configuration
 #include <stdbool.h>
 
 #ifndef MAX_PROCESS
-#define MAX_PROCESS 5
+#define MAX_PROCESS 20
 #endif
 
 
@@ -71,9 +71,12 @@ typedef struct Config{
     bool rand_cpu_burst;// false: (default) fixed to DEFAULT_CPU_BURST for all processes
                         // true: random (1 ~ MAX_CPU_BURST)
     bool rand_io_burst; // false: (default) fixed to DEFAULT_IO_BURST for all processes                   
+
+    int num_process;    // number of processes to generate
 }Config;
 
 // function prototypes
+Process** create_process(Config *cfg);
 Process* _create_process(Config *cfg);
 Queue* create_queue(int priority);
 void enqueue(Queue *q, Process *p);
