@@ -1,3 +1,10 @@
+<REMINDER>
+TODO-next: cpu_scheduler.c(379): to_term_q()
+- move finished process to term_q and calculate evaluation metrics (time related attributes)
+- update queue counts etc.
+
+
+<NOTES>
 *malloc on ...
 =============
 create_process() --> (Process**) new_pool
@@ -33,6 +40,15 @@ when the process is running or i/o-waiting..?
 [finished check]
 - check if new_pool is empty AND term_q count == num_process --> done. Stop loop.
 - check if there are new arrivals in new_pool --> enqueue() to ready_q
+
+[running_p check]
+- update burst time (cpu_burst, io_burst) of running_p (and i/o waiting when implemented)
+- check running_p (and i/o waiting when implemented) --> if done, terminate and enqueue() to term_q
+- check if running_p is NULL --> scheduler() assigns a new process to running_p
+    - if scheduler() returns NULL, (but not done yet) --> idle time. (increment idle_time if implement)
+
+[update time related stuff for all processes]
+- update waiting time of all processes in ready_q (ready_wait_time++)
 
 [running_p check]
 - update burst time (cpu_burst, io_burst) of running_p (and i/o waiting when implemented)

@@ -57,10 +57,10 @@ Process* _create_process(Config *cfg){
     ... priority: (Config.use_priority=true) 1 ~ MAX_PRIORITY (4)
                   (Config.use_priority=false) DEFAULT_PRIORITY (0: PRIORITY NOT USED)
     
-    ... cpu_burst_init: (Config.rand_cpu_burst=true) 1 ~ MAX_CPU_BURST (20)
+    ... cpu_burst_time: (Config.rand_cpu_burst=true) 1 ~ MAX_CPU_BURST (20)
                         (Config.rand_cpu_burst=false) DEFAULT_CPU_BURST (10)
 
-    ... io_burst_init: (Config.rand_io_burst=true) 1 ~ MAX_IO_BURST (5)
+    ... io_burst_time: (Config.rand_io_burst=true) 1 ~ MAX_IO_BURST (5)
                        (Config.rand_io_burst=false) DEFAULT_IO_BURST (2)
 
     ... state: 0=new {1=ready, 2=running, 3=waiting, 4=terminated}
@@ -74,8 +74,8 @@ Process* _create_process(Config *cfg){
     new_process->pid = rand()%8999 + 1001;   // rand_pid=false is currently not implemented
     new_process->arrival_time = cfg->rand_arrival ? rand()%MAX_ARRIVAL_TIME + 1 : CLK;
     new_process->priority = cfg->use_priority ? rand()%MAX_PRIORITY + 1 : DEFAULT_PRIORITY;
-    new_process->cpu_burst_init = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
-    new_process->io_burst_init = cfg->rand_io_burst ? rand()%MAX_IO_BURST + 1 : DEFAULT_IO_BURST;
+    new_process->cpu_burst_time = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
+    new_process->io_burst_time = cfg->rand_io_burst ? rand()%MAX_IO_BURST + 1 : DEFAULT_IO_BURST;
     new_process->state = 0; // new
 
     // time related attributes are initialised to -1
@@ -219,42 +219,32 @@ Process* scheduler(Table* tbl, int algo){
         return NULL;
     }
 
+
+
+int CPU(Table* tbl){
+    /*
+    Computation on Process currently assigned to CPU
     
-    switch(algo){
-        case 0:
-            return _FCFS(tbl->ready_q);
-            break;
-        default:
-            printf("Error: Invalid algorithm number\n");
-            exit(1);
-    }
+    - check if running_p is NULL (i.e. no process is running)
+    - check if running_p is finished (i.e. cpu_burst_time == 0)
 
-
-}
-
-Process* _FCFS(Queue* q){
-    /* 
-    Returns the first (leftmost) process in the queue.
+    Returns
+    -------
+    -1: running_p is NULL
+    else: returns running_p's remaining CPU burst time (i.e. returns 0 if running_p is finished)
     */
 
-    // check if queue is empty (unlike scheduler(), this checks for .head Node, not count)
-    if(q->head == NULL){
-        printf("Error: .head Node is NULL but count is not 0\n");
-        return NULL;
+    // check if running_p is NULL
+    if(tbl->running_p == NULL){
+        return -1;
     }
 
-    Process *select_p = q->head->p;
-    select_p->state = 2; // running
-    q->head = q->head->right;
-    q->head->left = NULL;
-    q->cnt--;
-    
-    if(q->head == NULL){
-        q->tail = NULL;
-    } // queue is empty
+    // CPU burst for 1 CLK
+    tbl->running_p->cpu_burst_time--;
 
-    return select_p;
+    return tbl->running_p->cpu_burst_time;
 }
+
 
 void print_process_info(Process* p){
     // prints process attributes (except time related attributes for evaluation)
@@ -280,8 +270,8 @@ void print_process_info(Process* p){
             break;
     }
     printf("Priority: %d\n", p->priority);
-    printf("CPU Burst Time: %d\n", p->cpu_burst_init);
-    printf("I/O Burst_Time: %d\n", p->io_burst_init);
+    printf("CPU Burst Time: %d\n", p->cpu_burst_time);
+    printf("I/O Burst_Time: %d\n", p->io_burst_time);
     printf("Arrival_time: %d\n\n", p->arrival_time);
 }
 
@@ -341,8 +331,20 @@ int main(){
         arrived_to_ready(tbl, cfg.num_process);
 
         
-        // check running_p (done, NULL)
-
+        // run CPU 
+        int result = CPU(tbl);
+        switch(result){
+            case -1: // running_p is NULL
+                // CPU idle case
+                break;
+            case 0: // running_p is finished --> terminate
+                tbl->running_p->state = 4; // terminated
+                tbl->running_p->finish_time = tbl->clk; // finish time = current time
+                to_term_q(tbl->term_q, tbl->running_p); // add running_p to term_q and evaluate time related attributes
+                // remove running_p from ready_q
+                tbl->running_p = NULL;                
+                break;
+        }
 
         // run scheduler --> running_p is either assigned a new process or remains (depending on algo)
         // if running_p is NULL, increment idle time (if implement)
