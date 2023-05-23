@@ -1,0 +1,41 @@
+*malloc on ...
+=============
+create_process() --> (Process**) new_pool
+_create_process() --> (Process*) new processes
+
+
+create_table() --> (Table*) new_table (self)
+    - also calls create_queue() for wait, term queues and ready/priority queues
+    - if priority queues are used, (Queue**) prio_q is created (which is a queue of queues)
+create_queue() --> (Queue*) new queues
+
+enqueue() --> (Node*) new_node
+
+
+
+* when implementing I/O ...
+===========================
+maybe implement CPU and I/O burst as an array of length (cpu_burst + io_burst)
+[1,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1 ...] etc.
+where 1 is CPU burst and 0 is I/O burst
+
+when Process's state is 2 (running) or i/o-waiting (not assigned yet), pop the array etc.
+
+can't pop an array like a list in python tho so.. maybe use a pointer to the array and increment it
+when the process is running or i/o-waiting..? 
+
+!TBD!
+
+
+
+* list of checks to run on each CLK cycle
+==========================================
+[finished check]
+- check if new_pool is empty AND term_q count == num_process --> done. Stop loop.
+- check if there are new arrivals in new_pool --> enqueue() to ready_q
+
+[running_p check]
+- update burst time (cpu_burst, io_burst) of running_p (and i/o waiting when implemented)
+- check running_p (and i/o waiting when implemented) --> if done, terminate and enqueue() to term_q
+- check if running_p is NULL --> scheduler() assigns a new process to running_p
+    - if scheduler() returns NULL, (but not done yet) --> idle time. (increment idle_time if implement)
