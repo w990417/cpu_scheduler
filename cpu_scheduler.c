@@ -26,14 +26,14 @@ Process** create_process(Config *cfg){
     Creates a number of processes as specified and returns a job pool */
     
     int count = cfg->num_process;
-    Process **job_pool = (Process**) malloc(sizeof(Process*)*count);
+    Process **new_pool = (Process**) malloc(sizeof(Process*)*count);
     
-    // create processes and store them in job_pool
+    // create processes and store them in new_pool
     for(int i=0; i<count; i++){
-        job_pool[i] = _create_process(cfg);
+        new_pool[i] = _create_process(cfg);
     }
     
-    return job_pool;
+    return new_pool;
 }
 
 Process* _create_process(Config *cfg){
@@ -110,7 +110,7 @@ Queue* create_queue(int priority){
 
 Table* create_table(Config *cfg){
     /*
-    Create a Table struct which contains pointers to the ready, waiting, and terminated queues
+    Create a Table which keeps track of all queues, running process, and current time
 
     *** prio_q (which is a queue of queues) will be used instead of ready_q, when priority is used ***
 
@@ -121,11 +121,16 @@ Table* create_table(Config *cfg){
                   *** at this point, priority is not used ***
     */
     bool priority = cfg->use_priority;
+
+    // create new table
     Table *new_table = (Table*)malloc(sizeof(Table));   
+    new_table->new_pool = NULL;
     new_table->wait_q = create_queue(0);
     new_table->term_q = create_queue(0);
     new_table->running_p = NULL;
-    
+    new_table->clk = 0;
+
+
     // create ready_q or prio_q depending on `cfg.use_priority`
     if (priority == false){
         new_table->ready_q = create_queue(0);
@@ -142,6 +147,25 @@ Table* create_table(Config *cfg){
     } // priority is used (prio_q is used instead of ready_q)
     
     return NULL;    // should not reach here
+}
+
+void arrived_to_ready(Table* tbl, int count){
+    /*
+    Check new_pool for processes that have arrived and enqueue them to ready_q
+
+    Parameters
+    ----------
+    int count: maximum length of new_pool (i.e. cfg->num_process)
+    */
+    Process **new_pool = tbl->new_pool;
+    Queue *ready_q = tbl->ready_q;
+
+    for(int i=0; i<count; i++){
+        if(new_pool[i]->arrival_time == tbl->clk){
+            enqueue(ready_q, new_pool[i]);
+            new_pool[i]->state = 1; // ready
+        }
+    }
 }
 
 
@@ -177,7 +201,7 @@ void enqueue(Queue *q, Process *p){
 
 Process* scheduler(Table* tbl, int algo){
     /*
-    Reads the ready queue and assigns a process to CPU
+    Reads the ready queue and assigns a process to CPU (i.e. state=2 (running))
 
     Queues* qs: pointer to the Queues struct
         ->ready_q: (Queue*) pointer to the ready queue
@@ -187,16 +211,49 @@ Process* scheduler(Table* tbl, int algo){
     Returns
     -------
     Process *p: pointer to the process to be executed
+        returns NULL if ready queue or priority queues are empty
     */
+
+    // check if ready queue is empty
+    if(tbl->ready_q->cnt == 0){
+        return NULL;
+    }
+
+    
+    switch(algo){
+        case 0:
+            return _FCFS(tbl->ready_q);
+            break;
+        default:
+            printf("Error: Invalid algorithm number\n");
+            exit(1);
+    }
+
+
 }
 
 Process* _FCFS(Queue* q){
     /* 
     Returns the first (leftmost) process in the queue.
-    
     */
-    
 
+    // check if queue is empty (unlike scheduler(), this checks for .head Node, not count)
+    if(q->head == NULL){
+        printf("Error: .head Node is NULL but count is not 0\n");
+        return NULL;
+    }
+
+    Process *select_p = q->head->p;
+    select_p->state = 2; // running
+    q->head = q->head->right;
+    q->head->left = NULL;
+    q->cnt--;
+    
+    if(q->head == NULL){
+        q->tail = NULL;
+    } // queue is empty
+
+    return select_p;
 }
 
 void print_process_info(Process* p){
@@ -254,7 +311,6 @@ void print_queue(Queue *q){
 
 
 
-
 int main(){
     // set test init
     Config cfg = {
@@ -265,33 +321,41 @@ int main(){
         .rand_io_burst = true,
         .num_process = 10
     };
-    CLK = 0;
     srand(99);
     
 
-    // create an empty table. (ready, wait, term queues are created)
+    // create an empty table. (empty new_pool, ready, wait, term queues are created. CLK <-- 0)
     Table *tbl = create_table(&cfg);
     
-    // create processes, store them in job_pool
-    Process** job_pool = create_process(&cfg);
+    // create processes, store them in new_pool (tbl->new_pool)
+    tbl->new_pool = create_process(&cfg);
 
     // print process info
-    for(int i=0; i<cfg.num_process; i++){
-        print_process_info(job_pool[i]);
-    }
+    /* for(int i=0; i<cfg.num_process; i++){
+        print_process_info(new_pool[i]);
+    } */
 
     // loop
-    while(CLK < MAX_TIME){
+    while(tbl->clk < MAX_TIME){
         // add processes that arrived to ready_queue
-        for(int i=0; i<cfg.num_process; i++){
-            if(job_pool[i]->arrival_time == CLK){
-                enqueue(tbl->ready_q, job_pool[i]);
-            }
-        }
-        CLK++;
+        arrived_to_ready(tbl, cfg.num_process);
+
+        
+        // check running_p (done, NULL)
+
+
+        // run scheduler --> running_p is either assigned a new process or remains (depending on algo)
+        // if running_p is NULL, increment idle time (if implement)
+        // for now (FCFS), running_p shouldn't be NULL unless ready queue is empty
+
+
+        //check if done (new_pool is empty AND term_q count == num_process)
+
+        tbl->clk++;
     }
 
     // print ready queue
+    printf("Ready Queue\n");
     print_queue(tbl->ready_q);
 
     return 0;

@@ -49,11 +49,13 @@ typedef struct Queue{
 
 typedef struct Table{
     /* Collection of Queue's */
+    Process** new_pool;     // new
     struct Queue* ready_q;  // ready
     struct Queue* wait_q;   // waiting/blocked
     struct Queue* term_q;   // terminated
     struct Queue** prio_q;  // priority queues (queue of queues)
     Process* running_p;     // Process currently running
+    int clk;                // current time
 }Table;
 
 
@@ -89,6 +91,7 @@ Process** create_process(Config *cfg);
 Process* _create_process(Config *cfg);
 Table* create_table(Config *cfg);
 Queue* create_queue(int priority);
+void arrived_to_ready(Table* tbl, int count);
 void enqueue(Queue *q, Process *p);
 void print_process_info(Process *p);
 void print_queue(Queue *q);
