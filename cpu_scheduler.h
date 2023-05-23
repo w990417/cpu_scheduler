@@ -47,6 +47,14 @@ typedef struct Queue{
     int cnt;
 }Queue;
 
+typedef struct Queues{
+    struct Queue* ready_q;  // ready
+    struct Queue* wait_q;   // waiting/blocked
+    struct Queue* term_q;   // terminated
+    struct Queue** prio_q;  // priority queues
+    Process* cpu;           // running
+}Queues;
+
 
 typedef struct Node{
     /*
@@ -82,6 +90,7 @@ Queue* create_queue(int priority);
 void enqueue(Queue *q, Process *p);
 void print_process_info(Process *p);
 void print_queue(Queue *q);
+//Process* scheduler();
 
 
 

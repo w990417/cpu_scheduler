@@ -94,8 +94,8 @@ Queue* create_queue(int priority){
     
     Parameters
     ----------
-    int priority: priority of the queue (1~4)
-        if priority is 0, the queue does not use priority (FCFS)
+    int priority: priority of the queue (0, 1~4)
+        if priority is 0, the queue does not use priority
     
     */
     Queue *new_queue = (Queue*)malloc(sizeof(Queue));
@@ -138,7 +138,21 @@ void enqueue(Queue *q, Process *p){
 
 }
 
+Process* scheduler(Queues* qs, int algo){
+    /*
+    Reads the ready queue and assigns a process to CPU
 
+    Queues* qs: pointer to the Queues struct
+        ->ready_q: (Queue*) pointer to the ready queue
+        ->wait_q: (Queue*) pointer to the waiting/blocking queue
+        ->term_q:
+
+    Returns
+    -------
+    Process *p: pointer to the process to be executed
+    */
+    
+}
 
 void print_process_info(Process* p){
     // prints process attributes (except time related attributes for evaluation)
@@ -192,6 +206,10 @@ void print_queue(Queue *q){
 }
 
 
+
+
+
+
 int main(){
     // set test init
     Config cfg = {
@@ -207,7 +225,9 @@ int main(){
     
 
     // create empty ready_q
-    Queue* ready_q = create_queue(0);
+    Queues* qs = (Queues*)malloc(sizeof(Queues));
+    qs->ready_q = create_queue(0);
+    
     // create processes
     Process** job_pool = create_process(&cfg);
 
@@ -222,15 +242,15 @@ int main(){
         for(int i=0; i<cfg.num_process; i++){
             if(job_pool[i]->arrival_time == CLK){
                 job_pool[i]->state = 1; // ready
-                enqueue(ready_q, job_pool[i]);
+                enqueue(qs->ready_q, job_pool[i]);
                 printf("[%d] added %d to ready queue\n", CLK, job_pool[i]->pid);
             }
         }
         CLK++;
     }
 
-    print_queue(ready_q);
+    print_queue(qs->ready_q);
 
-    return 99;
+    return;
 }
 

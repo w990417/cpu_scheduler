@@ -1,15 +1,5 @@
-# conda environment folder
-envs/
-# jupyter notebook for quick snippets etc.
-sketchpad.ipynb
-
-
-# do not track bin and .dSYM for now
+.ipynb_checkpoints/
 *.dSYM
 bin/
-
-
-# .vscode
 .vscode/
-# .exe
 *.exe
