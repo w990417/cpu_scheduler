@@ -47,13 +47,14 @@ typedef struct Queue{
     int cnt;
 }Queue;
 
-typedef struct Queues{
+typedef struct Table{
+    /* Collection of Queue's */
     struct Queue* ready_q;  // ready
     struct Queue* wait_q;   // waiting/blocked
     struct Queue* term_q;   // terminated
-    struct Queue** prio_q;  // priority queues
-    Process* cpu;           // running
-}Queues;
+    struct Queue** prio_q;  // priority queues (queue of queues)
+    Process* running_p;     // Process currently running
+}Table;
 
 
 typedef struct Node{
@@ -74,7 +75,7 @@ typedef struct Config{
                         // true: random (1001 ~ 9999)
     bool rand_arrival;  // false: (default) increments from 0
                         // true: random (0 ~ MAX_ARRIVAL_TIME)
-    bool rand_priority; // false: (default) set to DEFAULT_PRIORITY for all processes (0: PRIORITY NOT USED)
+    bool use_priority; // false: (default) set to DEFAULT_PRIORITY for all processes (0: PRIORITY NOT USED)
                         // true: random (1 ~ MAX_PRIORITY)
     bool rand_cpu_burst;// false: (default) fixed to DEFAULT_CPU_BURST for all processes
                         // true: random (1 ~ MAX_CPU_BURST)
@@ -86,11 +87,13 @@ typedef struct Config{
 // function prototypes
 Process** create_process(Config *cfg);
 Process* _create_process(Config *cfg);
+Table* create_table(Config *cfg);
 Queue* create_queue(int priority);
 void enqueue(Queue *q, Process *p);
 void print_process_info(Process *p);
 void print_queue(Queue *q);
-//Process* scheduler();
+Process* scheduler(Table* tbl, int algo);
+Process* _FCFS();
 
 
 

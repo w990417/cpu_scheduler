@@ -54,8 +54,8 @@ Process* _create_process(Config *cfg){
     ... arrival_time: (Config.rand_arrival=true) 0 ~ MAX_ARRIVAL_TIME (20)
                       (Config.rand_arrival=false) CLK (current time)
     
-    ... priority: (Config.rand_priority=true) 1 ~ MAX_PRIORITY (4)
-                  (Config.rand_priority=false) DEFAULT_PRIORITY (0: PRIORITY NOT USED)
+    ... priority: (Config.use_priority=true) 1 ~ MAX_PRIORITY (4)
+                  (Config.use_priority=false) DEFAULT_PRIORITY (0: PRIORITY NOT USED)
     
     ... cpu_burst_init: (Config.rand_cpu_burst=true) 1 ~ MAX_CPU_BURST (20)
                         (Config.rand_cpu_burst=false) DEFAULT_CPU_BURST (10)
@@ -73,7 +73,7 @@ Process* _create_process(Config *cfg){
 
     new_process->pid = rand()%8999 + 1001;   // rand_pid=false is currently not implemented
     new_process->arrival_time = cfg->rand_arrival ? rand()%MAX_ARRIVAL_TIME + 1 : CLK;
-    new_process->priority = cfg->rand_priority ? rand()%MAX_PRIORITY + 1 : DEFAULT_PRIORITY;
+    new_process->priority = cfg->use_priority ? rand()%MAX_PRIORITY + 1 : DEFAULT_PRIORITY;
     new_process->cpu_burst_init = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
     new_process->io_burst_init = cfg->rand_io_burst ? rand()%MAX_IO_BURST + 1 : DEFAULT_IO_BURST;
     new_process->state = 0; // new
@@ -90,7 +90,7 @@ Process* _create_process(Config *cfg){
 
 Queue* create_queue(int priority){
     /*
-    Create a Queue
+    Create an empty Queue
     
     Parameters
     ----------
@@ -105,6 +105,43 @@ Queue* create_queue(int priority){
     new_queue->cnt = 0;
 
     return new_queue;
+}
+
+
+Table* create_table(Config *cfg){
+    /*
+    Create a Table struct which contains pointers to the ready, waiting, and terminated queues
+
+    *** prio_q (which is a queue of queues) will be used instead of ready_q, when priority is used ***
+
+    Parameters
+    ----------
+    int priority: 0 (priority queue not created)
+                  1~4 (`priority` number of priority queues created)
+                  *** at this point, priority is not used ***
+    */
+    bool priority = cfg->use_priority;
+    Table *new_table = (Table*)malloc(sizeof(Table));   
+    new_table->wait_q = create_queue(0);
+    new_table->term_q = create_queue(0);
+    new_table->running_p = NULL;
+    
+    // create ready_q or prio_q depending on `cfg.use_priority`
+    if (priority == false){
+        new_table->ready_q = create_queue(0);
+        new_table->prio_q = NULL;
+        return new_table;
+    } // priority is not used (ready_q is used instead of prio_q)
+    else{
+        new_table->ready_q = NULL;
+        new_table->prio_q = (Queue**)malloc(sizeof(Queue*)*MAX_PRIORITY);
+        for(int i=0; i<MAX_PRIORITY; i++){
+            new_table->prio_q[i] = create_queue(i+1);
+        }
+        return new_table;
+    } // priority is used (prio_q is used instead of ready_q)
+    
+    return NULL;    // should not reach here
 }
 
 
@@ -138,7 +175,7 @@ void enqueue(Queue *q, Process *p){
 
 }
 
-Process* scheduler(Queues* qs, int algo){
+Process* scheduler(Table* tbl, int algo){
     /*
     Reads the ready queue and assigns a process to CPU
 
@@ -151,7 +188,15 @@ Process* scheduler(Queues* qs, int algo){
     -------
     Process *p: pointer to the process to be executed
     */
+}
+
+Process* _FCFS(Queue* q){
+    /* 
+    Returns the first (leftmost) process in the queue.
     
+    */
+    
+
 }
 
 void print_process_info(Process* p){
@@ -215,7 +260,7 @@ int main(){
     Config cfg = {
         .rand_pid = true,
         .rand_arrival = true,
-        .rand_priority = false,
+        .use_priority = false,
         .rand_cpu_burst = true,
         .rand_io_burst = true,
         .num_process = 10
@@ -224,11 +269,10 @@ int main(){
     srand(99);
     
 
-    // create empty ready_q
-    Queues* qs = (Queues*)malloc(sizeof(Queues));
-    qs->ready_q = create_queue(0);
+    // create an empty table. (ready, wait, term queues are created)
+    Table *tbl = create_table(&cfg);
     
-    // create processes
+    // create processes, store them in job_pool
     Process** job_pool = create_process(&cfg);
 
     // print process info
@@ -241,16 +285,15 @@ int main(){
         // add processes that arrived to ready_queue
         for(int i=0; i<cfg.num_process; i++){
             if(job_pool[i]->arrival_time == CLK){
-                job_pool[i]->state = 1; // ready
-                enqueue(qs->ready_q, job_pool[i]);
-                printf("[%d] added %d to ready queue\n", CLK, job_pool[i]->pid);
+                enqueue(tbl->ready_q, job_pool[i]);
             }
         }
         CLK++;
     }
 
-    print_queue(qs->ready_q);
+    // print ready queue
+    print_queue(tbl->ready_q);
 
-    return;
+    return 0;
 }
 
