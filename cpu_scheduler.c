@@ -57,10 +57,10 @@ Process* _create_process(Config *cfg){
     ... priority: (Config.use_priority=true) 1 ~ MAX_PRIORITY (4)
                   (Config.use_priority=false) DEFAULT_PRIORITY (0: PRIORITY NOT USED)
     
-    ... cpu_burst_init: (Config.rand_cpu_burst=true) 1 ~ MAX_CPU_BURST (20)
+    ... cpu_burst_time: (Config.rand_cpu_burst=true) 1 ~ MAX_CPU_BURST (20)
                         (Config.rand_cpu_burst=false) DEFAULT_CPU_BURST (10)
 
-    ... io_burst_init: (Config.rand_io_burst=true) 1 ~ MAX_IO_BURST (5)
+    ... io_burst_time: (Config.rand_io_burst=true) 1 ~ MAX_IO_BURST (5)
                        (Config.rand_io_burst=false) DEFAULT_IO_BURST (2)
 
     ... state: 0=new {1=ready, 2=running, 3=waiting, 4=terminated}
@@ -74,8 +74,8 @@ Process* _create_process(Config *cfg){
     new_process->pid = rand()%8999 + 1001;   // rand_pid=false is currently not implemented
     new_process->arrival_time = cfg->rand_arrival ? rand()%MAX_ARRIVAL_TIME + 1 : CLK;
     new_process->priority = cfg->use_priority ? rand()%MAX_PRIORITY + 1 : DEFAULT_PRIORITY;
-    new_process->cpu_burst_init = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
-    new_process->io_burst_init = cfg->rand_io_burst ? rand()%MAX_IO_BURST + 1 : DEFAULT_IO_BURST;
+    new_process->cpu_burst_time = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
+    new_process->io_burst_time = cfg->rand_io_burst ? rand()%MAX_IO_BURST + 1 : DEFAULT_IO_BURST;
     new_process->state = 0; // new
 
     // time related attributes are initialised to -1
@@ -199,6 +199,41 @@ void enqueue(Queue *q, Process *p){
 
 }
 
+
+int CPU(Table* tbl){
+    /*
+    Computation on Process currently assigned to CPU
+    
+    - check if running_p is NULL (i.e. no process is running)
+    - check if running_p is finished (i.e. cpu_burst_time == 0)
+
+    Returns
+    -------
+    0: process is finished or no process is running
+    */
+
+    // check if running_p is NULL
+    if(tbl->running_p == NULL){
+        return 0;
+    }
+
+    // CPU burst for 1 CLK
+    tbl->running_p->cpu_burst_time--;
+
+    // check if running_p is finished
+    if(tbl->running_p->cpu_burst_time == 0){
+        printf("[%d] is finished at %d\n", tbl->running_p->pid, tbl->clk);
+        tbl->running_p->state = 3; // terminated
+        tbl->running_p->finish_time = tbl->clk;
+        enqueue(tbl->term_q, tbl->running_p);   // create Node at term
+        tbl->running_p = NULL;
+        return 0;
+    }
+
+
+    return tbl->running_p->cpu_burst_time;
+}
+
 Process* scheduler(Table* tbl, int algo){
     /*
     Reads the ready queue and assigns a process to CPU (i.e. state=2 (running))
@@ -243,15 +278,20 @@ Process* _FCFS(Queue* q){
         return NULL;
     }
 
-    Process *select_p = q->head->p;
+    Node* curr = q->head;
+    Process* select_p = q->head->p;
+
     select_p->state = 2; // running
     q->head = q->head->right;
-    q->head->left = NULL;
-    q->cnt--;
-    
     if(q->head == NULL){
         q->tail = NULL;
     } // queue is empty
+    else{
+        q->head->left = NULL;
+    }
+    q->cnt--;
+
+    free(curr);
 
     return select_p;
 }
@@ -280,8 +320,8 @@ void print_process_info(Process* p){
             break;
     }
     printf("Priority: %d\n", p->priority);
-    printf("CPU Burst Time: %d\n", p->cpu_burst_init);
-    printf("I/O Burst_Time: %d\n", p->io_burst_init);
+    printf("CPU Burst Time: %d\n", p->cpu_burst_time);
+    printf("I/O Burst_Time: %d\n", p->io_burst_time);
     printf("Arrival_time: %d\n\n", p->arrival_time);
 }
 
@@ -340,9 +380,11 @@ int main(){
         // add processes that arrived to ready_queue
         arrived_to_ready(tbl, cfg.num_process);
 
-        
-        // check running_p (done, NULL)
-
+        // run CPU; check running_p
+        if(CPU(tbl) == 0){
+            // CPU is idle (NULL) or running_p is finished (NULL)
+            tbl->running_p = scheduler(tbl, 0);
+        }
 
         // run scheduler --> running_p is either assigned a new process or remains (depending on algo)
         // if running_p is NULL, increment idle time (if implement)
@@ -357,6 +399,9 @@ int main(){
     // print ready queue
     printf("Ready Queue\n");
     print_queue(tbl->ready_q);
+
+    printf("Term Queue\n");
+    print_queue(tbl->term_q);
 
     return 0;
 }
