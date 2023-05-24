@@ -26,8 +26,11 @@ typedef struct Process{
     int pid;             // 1001 ~ 9999
     int state;           // 0=new, 1=ready, 2=running, 3=waiting, 4=terminated
     int priority;        // 1~MAX_PRIORITY=4 where 1 is the highest priority and default is 3
-    int cpu_burst_time;  // remaining cpu burst
-    int io_burst_time;   // remaining io burst
+    
+    int cpu_burst_init;  // initial cpu_burst_time
+    int io_burst_init;   // initial io_burst_time
+    int cpu_burst_rem;  // remaining cpu burst
+    int io_burst_rem;   // remaining io burst
     int arrival_time;    // 0 ~ MAX_ARRIVAL_TIME, default is global process_cnt
     
     // for evaluation()
@@ -91,10 +94,16 @@ Process** create_process(Config *cfg);
 Process* _create_process(Config *cfg);
 Table* create_table(Config *cfg);
 Queue* create_queue(int priority);
+
 void arrived_to_ready(Table* tbl, int count);
 void enqueue(Queue *q, Process *p);
+
 void print_process_info(Process *p);
 void print_queue(Queue *q);
+
+void update_wait_time(Table* tbl);
+void evaluate(Table* tbl);
+
 
 int CPU(Table* tbl);
 Process* scheduler(Table* tbl, int algo);

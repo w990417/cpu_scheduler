@@ -2,3 +2,6 @@
 bin/
 .vscode/
 *.exe
+
+# output
+cpu_scheduler
