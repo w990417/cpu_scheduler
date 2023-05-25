@@ -14,9 +14,8 @@
 #define MAX_IO_BURST 5
 #define DEFAULT_IO_BURST 2
 
-#define MAX_TIME 100
+#define MAX_TIME 300
 // global clock variable
-int CLK;
 
 
 // FUNCTIONS //
@@ -72,7 +71,7 @@ Process* _create_process(Config *cfg){
     
 
     new_process->pid = rand()%8999 + 1001;   // rand_pid=false is currently not implemented
-    new_process->arrival_time = cfg->rand_arrival ? rand()%MAX_ARRIVAL_TIME + 1 : CLK;
+    new_process->arrival_time = cfg->rand_arrival ? rand()%MAX_ARRIVAL_TIME + 1 : 0;
     new_process->priority = cfg->use_priority ? rand()%MAX_PRIORITY + 1 : DEFAULT_PRIORITY;
     new_process->cpu_burst_init = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
     new_process->io_burst_init = cfg->rand_io_burst ? rand()%MAX_IO_BURST + 1 : DEFAULT_IO_BURST;
@@ -202,6 +201,59 @@ void enqueue(Queue *q, Process *p){
 }
 
 
+void dequeue(Queue* q, Process* p){
+    /*
+    Remove a node from the queue
+    */
+    Node* curr = q->head;
+    // check if queue is empty
+    if(curr == NULL){
+        printf("Error: dequeue() called on empty queue\n");
+        exit(1);
+    }
+    // search for the node to dequeue
+    while(curr != NULL){
+        if(curr->p == p){ // found the node to dequeue
+            if(curr == q->head && curr == q->tail){ // curr is head and tail, only node
+                q->head = NULL;
+                q->tail = NULL;
+                free(curr);
+                q->cnt--;
+                // q is now empty
+                if(q->cnt != 0){
+                    printf("Error: dequeue() empty queue's cnt is not 0\n");
+                    exit(1);
+                }
+                return;
+            } // if: curr is head and tail, only node
+            else if(curr == q->head){ // curr is head, not tail
+                q->head = curr->right;
+                q->head->left = NULL;
+                free(curr);
+                q->cnt--;
+                return;
+            } // if: curr is head, not tail
+            else if(curr == q->tail){ // curr is tail
+                q->tail = curr->left;
+                q->tail->right = NULL;
+                free(curr);
+                q->cnt--;
+                return;
+            } // if: curr is tail
+            else{ // curr is not head, not tail
+                curr->left->right = curr->right;
+                curr->right->left = curr->left;
+                free(curr);
+                q->cnt--;
+                return;
+            } // if: curr is not head, not tail
+        } // if: found the node to dequeue
+        curr = curr->right;
+    } // iterate through the queue
+    printf("Error: dequeue() couldn't find the process to dequeue\n");
+    exit(1);
+}
+
 
 void update_wait_time(Table* tbl){
     /*
@@ -276,6 +328,7 @@ void evaluate(Table* tbl){
                     printf("--------------------\n");
                     printf("Arrival time: %d\n", curr->p->arrival_time);
                     printf("CPU burst time: %d\n", curr->p->cpu_burst_init);
+                    printf("Finish time: %d\n", curr->p->finish_time);
                     printf("Priority: %d\n", curr->p->priority);
                     printf("Wait time in ready queue: %d\n", curr->p->ready_wait_time);
                     printf("Turnaround time: %d\n\n\n", curr->p->turnaround_time);
@@ -291,30 +344,39 @@ void evaluate(Table* tbl){
 }
 
 
-int CPU(Table* tbl){
+int CPU(Table* tbl, int algo){
     /*
-    Computation on Process currently assigned to CPU
-    
-    - check if running_p is NULL (i.e. no process is running)
-    - check if running_p is finished (i.e. cpu_burst_time == 0)
+    1. Check if there is a process already assigned to CPU (running_p),
+       if empty, assign (schedule) a process from ready_q to running_p
+    2. Compute CPU burst for running_p
+    3. Check if running_p is finished. If done, terminate and enqueue
+       to term_q and set running_p to NULL
 
     Returns
     -------
-    0: process is finished or no process is running
+    0: process is finished
+    -1: schedule() didn't return a process (ready_q is empty)
+    >0: process is not finished, return remaining CPU burst time
     */
 
     // check if running_p is NULL
     if(tbl->running_p == NULL){
-        return 0;
+        tbl->running_p = scheduler(tbl, algo);
+        if(tbl->running_p == NULL){
+            return -1;  // no running_p assigned to CPU.
+        }
+        else{
+            printf("[%d] is scheduled at %d\n", tbl->running_p->pid, tbl->clk);
+        }
     }
 
-    // CPU burst for 1 CLK
+    // Compute: CPU burst for 1 CLK
     tbl->running_p->cpu_burst_rem--;
 
     // if running_p is finished
     if(tbl->running_p->cpu_burst_rem == 0){
         printf("[%d] is finished at %d\n", tbl->running_p->pid, tbl->clk);
-        tbl->running_p->state = 3; // terminated
+        tbl->running_p->state = 4; // terminated
         tbl->running_p->finish_time = tbl->clk;
         tbl->running_p->turnaround_time =
         tbl->running_p->finish_time - tbl->running_p->arrival_time;
@@ -352,13 +414,18 @@ Process* scheduler(Table* tbl, int algo){
     
     switch(algo){
         case 0:
+            printf("<@%d> Scheduler: FCFS\n", tbl->clk);
             return _FCFS(tbl->ready_q);
+            break;
+
+        case 1:
+            printf("<@%d> Scheduler: SJF\n", tbl->clk);
+            return _SJF(tbl->ready_q);
             break;
         default:
             printf("Error: Invalid algorithm number\n");
             exit(1);
     }
-
 
 }
 
@@ -373,20 +440,45 @@ Process* _FCFS(Queue* q){
         return NULL;
     }
 
-    Node* curr = q->head;
     Process* select_p = q->head->p;
-
     select_p->state = 2; // running
-    q->head = q->head->right;
-    if(q->head == NULL){
-        q->tail = NULL;
-    } // queue is empty
-    else{
-        q->head->left = NULL;
-    }
-    q->cnt--;
+    dequeue(q, select_p); // remove Node from queue
 
-    free(curr);
+    return select_p;
+}
+
+
+Process* _SJF(Queue* q){
+    /* 
+    Returns the process with the shortest CPU burst time in the queue.
+    */
+
+    // check if queue is empty (unlike scheduler(), this checks for .head Node, not count)
+    if(q->head == NULL){
+        printf("Error: .head Node is NULL but count is not 0\n");
+        return NULL;
+    }
+
+    Node* curr = q->head;   // not NULL
+    Node* min_node = curr;  // not NULL
+    Process* select_p;
+
+    // scroll thru queue to find process with min cpu_burst_rem
+    while(curr != NULL){
+        if(curr->p->cpu_burst_rem < min_node->p->cpu_burst_rem){
+            min_node = curr;
+        }
+        curr = curr->right;
+    } // curr == NULL
+    select_p = min_node->p;
+
+    if(select_p == NULL){
+        printf("Error: _SJF() select_p is NULL\n");
+        exit(1);
+    } // just in case
+
+    select_p->state = 2; // 2: running
+    dequeue(q, select_p); // remove min_node from queue
 
     return select_p;
 }
@@ -422,7 +514,6 @@ void print_process_info(Process* p){
 
 
 void print_queue(Queue *q){
-
     // check if empty
     if(q->head == NULL){
         printf("Queue is empty\n");
@@ -451,7 +542,8 @@ int main(){
         .use_priority = false,
         .rand_cpu_burst = true,
         .rand_io_burst = true,
-        .num_process = 10
+        .num_process = 10,
+        .algo = 1
     };
     srand(99);
     
@@ -463,32 +555,30 @@ int main(){
     tbl->new_pool = create_process(&cfg);
 
     // print process info
-    /* for(int i=0; i<cfg.num_process; i++){
-        print_process_info(new_pool[i]);
-    } */
+    for(int i=0; i<cfg.num_process; i++){
+        print_process_info(tbl->new_pool[i]);
+    }
 
     // loop
     while(tbl->clk < MAX_TIME){
-        // stop if all processes are finished
-        if(tbl->term_q->cnt == cfg.num_process){
-            break;
-        }
-
         // add processes that arrived to ready_queue
         arrived_to_ready(tbl, cfg.num_process);
 
-        // run CPU; check running_p
-        if(CPU(tbl) == 0){
-            // CPU is idle (NULL) or running_p is finished (NULL)
-            tbl->running_p = scheduler(tbl, 0);
+        // CPU(): 1. Schedule process to CPU (if NULL)
+        //        2. Decrement CPU burst time (compute)
+        //        3. If CPU burst time is 0, move process to wait queue
+        if (CPU(tbl, cfg.algo) == -1){
+            // running_p is NULL and ready queue is empty
+            // check if all processes are finished
+            if(tbl->term_q->cnt == cfg.num_process){
+                printf("<@%d> TASK COMPLETE\n", tbl->term_q->tail->p->finish_time);
+                break; // Done: break out of while loop
+            }
+            else {
+                printf("<@%d> IDLE: ready queue is empty\n\n", tbl->clk);
+                // increment idle time (if implementing)
+            }
         }
-
-        // run scheduler --> running_p is either assigned a new process or remains (depending on algo)
-        // if running_p is NULL, increment idle time (if implement)
-        // for now (FCFS), running_p shouldn't be NULL unless ready queue is empty
-
-
-        //check if done (new_pool is empty AND term_q count == num_process)
 
         // increment wait time for all processes in wait queue
         update_wait_time(tbl);

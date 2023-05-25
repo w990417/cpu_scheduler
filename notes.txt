@@ -1,3 +1,12 @@
+BOOKMARK:
+<0525>
+modifying CPU() to...
+1. check running_p
+2. assign new process to running_p if NULL
+3. compute for 1 CLK cycle
+4. check if running_p is done
+5. send to term_q if done
+** check the cycle note below for details.
 
 TODO: 
 <0524>
@@ -6,9 +15,23 @@ evaluate(): modify to return an eval struct type which contain
     time related attributes for all processes + avg + sums,
     which can be searched up with user input.
 
+<0525>
+global var `log` and `log_idx`
+ - log: array of strings
+ - log_idx: index of log array
+
+e.g:
+void addToLog(const char* message) {
+  strncpy(log[nextLogEntry], message, sizeof(log[nextLogEntry]) - 1);
+  log[nextLogEntry][sizeof(log[nextLogEntry]) - 1] = '\0';  // Ensure null-termination
+  nextLogEntry++;
+}
+>> addToLog("[PID: 9441] is scheduled at clk=5");
+
+print_log() function
 
 *malloc on ...
-=============
+==============
 create_process() --> (Process**) new_pool
 _create_process() --> (Process*) new processes
 
@@ -20,6 +43,10 @@ create_queue() --> (Queue*) new queues
 
 enqueue() --> (Node*) new_node
 
+
+*free on ...
+============
+dequeue() --> (Node*) Node of the process that is dequeued
 
 
 * when implementing I/O ...
@@ -37,8 +64,37 @@ when the process is running or i/o-waiting..?
 
 
 
-* list of checks to run on each CLK cycle
+* CLK cycle ...
 ==========================================
+
+--- CLK=t ---
+
+[arrival check]: arrive @ CLK=t
+
+[CPU check]: check if there is a process running on CPU
+ - true: do nothing (keep process)
+ - false: scheduler() assigns a new process to CPU (assign @ CLK=t)
+
+[CPU compute]: compute for 1 CLK cycle (CLK=t)
+
+[CPU check]: check if process is done
+ - true: terminate process (finished @ CLK=t)
+ - false: do nothing (keep process)
+
+[All done check]: check if all processes are done
+ - true: finished @ CLK=t
+ - false: ready queue wait time incremented --> waited during CLK=t
+
+[CPU check]: check if process should be preempted
+ - TODO: preemption not implemented yet
+ 
+update CLK=t+1
+
+--- CLK=t+1 ---
+
+
+
+
 [finished check]
 - check if new_pool is empty AND term_q count == num_process --> done. Stop loop.
 - check if there are new arrivals in new_pool --> enqueue() to ready_q

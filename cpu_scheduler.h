@@ -87,6 +87,8 @@ typedef struct Config{
     bool rand_io_burst; // false: (default) fixed to DEFAULT_IO_BURST for all processes                   
 
     int num_process;    // number of processes to generate
+
+    int algo;           // 0: FCFS, 1: SJF,
 }Config;
 
 // function prototypes
@@ -96,7 +98,8 @@ Table* create_table(Config *cfg);
 Queue* create_queue(int priority);
 
 void arrived_to_ready(Table* tbl, int count);
-void enqueue(Queue *q, Process *p);
+void enqueue(Queue* q, Process* p);
+void dequeue(Queue* q, Process* p);
 
 void print_process_info(Process *p);
 void print_queue(Queue *q);
@@ -105,10 +108,10 @@ void update_wait_time(Table* tbl);
 void evaluate(Table* tbl);
 
 
-int CPU(Table* tbl);
+int CPU(Table* tbl, int algo);
 Process* scheduler(Table* tbl, int algo);
 Process* _FCFS(Queue* q);
-
+Process* _SJF(Queue* q);
 
 
 #endif  // CPU_SCHEDULER_H
