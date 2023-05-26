@@ -1,15 +1,17 @@
-BOOKMARK:
-<0525>
-modifying CPU() to...
-1. check running_p
-2. assign new process to running_p if NULL
-3. compute for 1 CLK cycle
-4. check if running_p is done
-5. send to term_q if done
-** check the cycle note below for details.
+CURRENT TASK:
+
+just finished rewriting CPU()
+scheduler() is removed
+prio_q is not used anymore (use ready_q instead)
+
+NEXT TASK:
+preemptive SJF.
+
+
+
 
 TODO: 
-<0524>
+<0524>-----------------------------------------------------------------------------
 struct Eval
 evaluate(): modify to return an eval struct type which contain
     time related attributes for all processes + avg + sums,
@@ -29,7 +31,17 @@ void addToLog(const char* message) {
 >> addToLog("[PID: 9441] is scheduled at clk=5");
 
 print_log() function
+<0524>-----------------------------------------------------------------------------
 
+
+<0526>-----------------------------------------------------------------------------
+modify enqueue() to take in states as well
+    - enqueue(Queue*, Process*, int from_state, int to_state)
+how to use enqueue for new_pool which is not a queue? ... just keep using arrived_to_ready()..?
+<0526>-----------------------------------------------------------------------------
+
+
+MISCELLANEOUS NOTES:
 *malloc on ...
 ==============
 create_process() --> (Process**) new_pool
@@ -71,9 +83,10 @@ when the process is running or i/o-waiting..?
 
 [arrival check]: arrive @ CLK=t
 
-[CPU check]: check if there is a process running on CPU
- - true: do nothing (keep process)
- - false: scheduler() assigns a new process to CPU (assign @ CLK=t)
+[CPU schedule] (scheduler() called)
+ - if running_p is NULL: scheduler() returns a process to run on CPU
+ - if running_p is not NULL: scheduler() returns running_p (no change), or preempt running_p with a new process
+ - if running_p is still NULL: CPU idle
 
 [CPU compute]: compute for 1 CLK cycle (CLK=t)
 
@@ -92,15 +105,15 @@ update CLK=t+1
 
 --- CLK=t+1 ---
 
+<0526>
+CPU() should schedule the process itself.
 
+FCFS : check ready queue --> return most recent
 
+SJF no preempt: check ready queue --> return shortest
+SJF preempt: check ready queue and running_p --> return shortest
 
-[finished check]
-- check if new_pool is empty AND term_q count == num_process --> done. Stop loop.
-- check if there are new arrivals in new_pool --> enqueue() to ready_q
+Priority no preempt: check rady queue --> return highest priority
+Priority preempt: check ready queue and running_p --> return highest priority
 
-[running_p check]
-- update burst time (cpu_burst, io_burst) of running_p (and i/o waiting when implemented)
-- check running_p (and i/o waiting when implemented) --> if done, terminate and enqueue() to term_q
-- check if running_p is NULL --> scheduler() assigns a new process to running_p
-    - if scheduler() returns NULL, (but not done yet) --> idle time. (increment idle_time if implement)
+RR: TODO

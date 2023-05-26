@@ -112,40 +112,17 @@ Queue* create_queue(int priority){
 Table* create_table(Config *cfg){
     /*
     Create a Table which keeps track of all queues, running process, and current time
-
-    *** prio_q (which is a queue of queues) will be used instead of ready_q, when priority is used ***
-
-    Parameters
-    ----------
-    int priority: 0 (priority queue not created)
-                  1~4 (`priority` number of priority queues created)
-                  *** at this point, priority is not used ***
     */
-    bool priority = cfg->use_priority;
 
-    // create new table
     Table *new_table = (Table*)malloc(sizeof(Table));   
-    new_table->new_pool = NULL;
+    new_table->new_pool = NULL; // create_process() will create/allocate new_pool
+    new_table->ready_q = create_queue(0);
     new_table->wait_q = create_queue(0);
     new_table->term_q = create_queue(0);
     new_table->running_p = NULL;
     new_table->clk = 0;
 
-
-    // create ready_q or prio_q depending on `cfg.use_priority`
-    if (priority == false){
-        new_table->ready_q = create_queue(0);
-        new_table->prio_q = NULL;
-        return new_table;
-    } // priority is not used (ready_q is used instead of prio_q)
-    else{
-        new_table->ready_q = NULL;
-        new_table->prio_q = (Queue**)malloc(sizeof(Queue*)*MAX_PRIORITY);
-        for(int i=0; i<MAX_PRIORITY; i++){
-            new_table->prio_q[i] = create_queue(i+1);
-        }
-        return new_table;
-    } // priority is used (prio_q is used instead of ready_q)
+    return new_table;
 }
 
 void arrived_to_ready(Table* tbl, int count){
@@ -161,8 +138,8 @@ void arrived_to_ready(Table* tbl, int count){
 
     for(int i=0; i<count; i++){
         if(new_pool[i]->arrival_time == tbl->clk){
-            // message for debugging
-            printf("[%d] arrived at %d\n", new_pool[i]->pid, tbl->clk);
+            // log message
+            printf("<@%d> ARRIVE: [%d] to ready queue\n", tbl->clk, new_pool[i]->pid);
             enqueue(ready_q, new_pool[i]);
             new_pool[i]->state = 1; // ready
         }
@@ -298,7 +275,7 @@ void evaluate(Table* tbl){
         scanf(" %d", &pid); // consume newline
         printf("--------------------------------------\n");
         Node* curr = term_q->head;
-        
+        if(pid == -1){break;}
         if(pid==0){
             int ready_wait_time_sum = 0;
             int turnaround_time_sum = 0;
@@ -321,65 +298,78 @@ void evaluate(Table* tbl){
             printf("Avg turnaround time: %d\n\n\n", turnaround_time_avg);
         } // display average values for all processes in term_q
         else{ // pid != 0
-            while(curr != NULL){
+            while(curr != NULL){    // search term_q for PID match
                 if(curr->p->pid == pid){
                     print_process_info(curr->p);
                     printf("[%d] Evaluation\n", pid);
                     printf("--------------------\n");
-                    printf("Arrival time: %d\n", curr->p->arrival_time);
-                    printf("CPU burst time: %d\n", curr->p->cpu_burst_init);
-                    printf("Finish time: %d\n", curr->p->finish_time);
-                    printf("Priority: %d\n", curr->p->priority);
                     printf("Wait time in ready queue: %d\n", curr->p->ready_wait_time);
                     printf("Turnaround time: %d\n\n\n", curr->p->turnaround_time);
+                    printf("Arrival time: %d\n", curr->p->arrival_time);
+                    printf("Finish time: %d\n", curr->p->finish_time);
+                    printf("CPU burst time: %d\n", curr->p->cpu_burst_init);
+                    printf("Priority: %d\n", curr->p->priority);
                     break;  // break out of while(curr != NULL)
                 }
                 curr = curr->right;
-            } // while(curr != NULL  
+            }
             if(curr == NULL){
                 printf("Error: PID not found\n\n\n");
             }
         } // else: display evaluation info for process with pid
-    } // while (pid > -1)
+    }
 }
 
 
 int CPU(Table* tbl, int algo){
-    /*
-    1. Check if there is a process already assigned to CPU (running_p),
-       if empty, assign (schedule) a process from ready_q to running_p
-    2. Compute CPU burst for running_p
-    3. Check if running_p is finished. If done, terminate and enqueue
-       to term_q and set running_p to NULL
+    // schedule a Process to execute
 
-    Returns
-    -------
-    0: process is finished
-    -1: schedule() didn't return a process (ready_q is empty)
-    >0: process is not finished, return remaining CPU burst time
-    */
-
-    // check if running_p is NULL
-    if(tbl->running_p == NULL){
-        tbl->running_p = scheduler(tbl, algo);
-        if(tbl->running_p == NULL){
-            return -1;  // no running_p assigned to CPU.
-        }
-        else{
-            printf("[%d] is scheduled at %d\n", tbl->running_p->pid, tbl->clk);
-        }
+    switch(algo){
+        case 0: // FCFS
+            if(tbl->running_p == NULL){
+                tbl->running_p = _FCFS(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
+                if(tbl->running_p != NULL){
+                    printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                    tbl->running_p->state = 2; // running
+                    dequeue(tbl->ready_q, tbl->running_p);             
+                }
+                else{
+                    printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
+                    return -1;
+                }
+            }
+            break;           
+        case 1: // SJF
+            if(tbl->running_p == NULL){
+                tbl->running_p = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
+                // log message
+                if(tbl->running_p != NULL){
+                    printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                    tbl->running_p->state = 2; // running
+                    dequeue(tbl->ready_q, tbl->running_p);
+                }
+                else{
+                    printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
+                    return -1;
+                }
+            }
+            break;
+        default:
+            printf("Error: CPU() algo not implemented\n");
+            exit(1);
     }
 
-    // Compute: CPU burst for 1 CLK
+    // 2. Compute: CPU burst for 1 CLK
     tbl->running_p->cpu_burst_rem--;
 
     // if running_p is finished
     if(tbl->running_p->cpu_burst_rem == 0){
-        printf("[%d] is finished at %d\n", tbl->running_p->pid, tbl->clk);
+        // log message
+        printf("<@%d> TERMINATE: [%d] to term queue \n", tbl->clk, tbl->running_p->pid);
         tbl->running_p->state = 4; // terminated
         tbl->running_p->finish_time = tbl->clk;
         tbl->running_p->turnaround_time =
-        tbl->running_p->finish_time - tbl->running_p->arrival_time;
+        (tbl->running_p->finish_time - tbl->running_p->arrival_time);
         
         enqueue(tbl->term_q, tbl->running_p);   // create Node at term
         
@@ -391,60 +381,18 @@ int CPU(Table* tbl, int algo){
     return tbl->running_p->cpu_burst_rem;
 }
 
-Process* scheduler(Table* tbl, int algo){
-    /*
-    Reads the ready queue and assigns a process to CPU (i.e. state=2 (running))
-
-    Queues* qs: pointer to the Queues struct
-        ->ready_q: (Queue*) pointer to the ready queue
-        ->wait_q: (Queue*) pointer to the waiting/blocking queue
-        ->term_q:
-
-    Returns
-    -------
-    Process *p: pointer to the process to be executed
-        returns NULL if ready queue or priority queues are empty
-    */
-
-    // check if ready queue is empty
-    if(tbl->ready_q->cnt == 0){
-        return NULL;
-    }
-
-    
-    switch(algo){
-        case 0:
-            printf("<@%d> Scheduler: FCFS\n", tbl->clk);
-            return _FCFS(tbl->ready_q);
-            break;
-
-        case 1:
-            printf("<@%d> Scheduler: SJF\n", tbl->clk);
-            return _SJF(tbl->ready_q);
-            break;
-        default:
-            printf("Error: Invalid algorithm number\n");
-            exit(1);
-    }
-
-}
 
 Process* _FCFS(Queue* q){
     /* 
     Returns the first (leftmost) process in the queue.
     */
 
-    // check if queue is empty (unlike scheduler(), this checks for .head Node, not count)
+    // check if ready queue is empty
     if(q->head == NULL){
-        printf("Error: .head Node is NULL but count is not 0\n");
-        return NULL;
+        return NULL;    // CPU() will be IDLE
     }
 
-    Process* select_p = q->head->p;
-    select_p->state = 2; // running
-    dequeue(q, select_p); // remove Node from queue
-
-    return select_p;
+    return q->head->p;
 }
 
 
@@ -453,35 +401,25 @@ Process* _SJF(Queue* q){
     Returns the process with the shortest CPU burst time in the queue.
     */
 
-    // check if queue is empty (unlike scheduler(), this checks for .head Node, not count)
+    // check if ready queue is empty
     if(q->head == NULL){
-        printf("Error: .head Node is NULL but count is not 0\n");
         return NULL;
     }
 
     Node* curr = q->head;   // not NULL
-    Node* min_node = curr;  // not NULL
-    Process* select_p;
+    Node* min_node = q->head;  // not NULL
 
-    // scroll thru queue to find process with min cpu_burst_rem
+    // seek ready queue
     while(curr != NULL){
-        if(curr->p->cpu_burst_rem < min_node->p->cpu_burst_rem){
+        if(curr->p->cpu_burst_rem < min_node->p->cpu_burst_rem){    // schedule earlier process if same cpu_burst_rem
             min_node = curr;
         }
         curr = curr->right;
     } // curr == NULL
-    select_p = min_node->p;
 
-    if(select_p == NULL){
-        printf("Error: _SJF() select_p is NULL\n");
-        exit(1);
-    } // just in case
-
-    select_p->state = 2; // 2: running
-    dequeue(q, select_p); // remove min_node from queue
-
-    return select_p;
+    return min_node->p;
 }
+
 
 void print_process_info(Process* p){
     // prints process attributes (except time related attributes for evaluation)
@@ -543,7 +481,7 @@ int main(){
         .rand_cpu_burst = true,
         .rand_io_burst = true,
         .num_process = 10,
-        .algo = 1
+        .algo = 0
     };
     srand(99);
     
@@ -560,42 +498,37 @@ int main(){
     }
 
     // loop
+    
     while(tbl->clk < MAX_TIME){
         // add processes that arrived to ready_queue
         arrived_to_ready(tbl, cfg.num_process);
 
-        // CPU(): 1. Schedule process to CPU (if NULL)
-        //        2. Decrement CPU burst time (compute)
-        //        3. If CPU burst time is 0, move process to wait queue
-        if (CPU(tbl, cfg.algo) == -1){
-            // running_p is NULL and ready queue is empty
-            // check if all processes are finished
-            if(tbl->term_q->cnt == cfg.num_process){
-                printf("<@%d> TASK COMPLETE\n", tbl->term_q->tail->p->finish_time);
-                break; // Done: break out of while loop
-            }
-            else {
-                printf("<@%d> IDLE: ready queue is empty\n\n", tbl->clk);
-                // increment idle time (if implementing)
-            }
+        // run CPU --> 
+        // 1. scheduler() will ...
+        // ... assign a new process to CPU (was NULL/idle) (dequeue from ready_q)
+        // ... assign new process to CPU (preempted running process) (dequeue from ready_q)
+        // ... keep the old process in CPU
+        // 2. compute running_p for 1 CLK
+        // 3. if running_p is finished, move it to term_q
+        CPU(tbl, cfg.algo);
+        
+        // check if all processes are terminated
+        if(tbl->term_q->cnt == cfg.num_process){
+            printf("<@%d> COMPLETE: All processes are terminated\n", tbl->clk);
+            break;
         }
-
+        
         // increment wait time for all processes in wait queue
         update_wait_time(tbl);
 
         tbl->clk++;
     }
 
-    // print ready queue
-    printf("Ready Queue\n");
-    print_queue(tbl->ready_q);
-
-    printf("Term Queue\n");
+    printf("\nTerm Queue at %d\n", tbl->clk);
     print_queue(tbl->term_q);
 
     // test evalutate per pid
     evaluate(tbl);
-
 
     return 0;
 }

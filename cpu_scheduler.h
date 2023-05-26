@@ -56,7 +56,6 @@ typedef struct Table{
     struct Queue* ready_q;  // ready
     struct Queue* wait_q;   // waiting/blocked
     struct Queue* term_q;   // terminated
-    struct Queue** prio_q;  // priority queues (queue of queues)
     Process* running_p;     // Process currently running
     int clk;                // current time
 }Table;
@@ -107,12 +106,9 @@ void print_queue(Queue *q);
 void update_wait_time(Table* tbl);
 void evaluate(Table* tbl);
 
-
 int CPU(Table* tbl, int algo);
-Process* scheduler(Table* tbl, int algo);
 Process* _FCFS(Queue* q);
 Process* _SJF(Queue* q);
-
 
 #endif  // CPU_SCHEDULER_H
 
