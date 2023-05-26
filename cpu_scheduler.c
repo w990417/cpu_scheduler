@@ -253,74 +253,6 @@ void update_wait_time(Table* tbl){
 }
 
 
-void evaluate(Table* tbl){
-    /*
-    Display evaluation info/metrics for the process in term_q
-    with the provided `pid`
-    if pid=0, it will display average values for all processes
-    in the term_q
-    
-    TODO: modify to return an eval struct type which contain
-    time related attributes for all processes + avg + sums,
-    which can be searched up with user input.
-
-     */
-    int pid;    // -1: exit, 0: avg, 1~: PID
-    Queue* term_q = tbl->term_q;
-
-    // take user input for pid
-    while(pid != -1){
-        printf("<<Enter PID to evaluate (0: average, -1: exit)>>\n");
-        printf("PID: ");
-        scanf(" %d", &pid); // consume newline
-        printf("--------------------------------------\n");
-        Node* curr = term_q->head;
-        if(pid == -1){break;}
-        if(pid==0){
-            int ready_wait_time_sum = 0;
-            int turnaround_time_sum = 0;
-            // int io_wait_time_sum = 0;
-            // int total_wait_time_sum = 0;
-
-            while(curr != NULL){
-                ready_wait_time_sum += curr->p->ready_wait_time;
-                turnaround_time_sum += curr->p->turnaround_time;
-                // io_wait_time_sum += curr->p->io_wait_time;
-                // total_wait_time_sum += curr->p->total_wait_time;
-                curr = curr->right;
-            }
-
-            int num_process = term_q->cnt;
-            int ready_wait_time_avg = ready_wait_time_sum / num_process;
-            int turnaround_time_avg = turnaround_time_sum / num_process;
-
-            printf("Avg wait time: %d\n", ready_wait_time_avg);
-            printf("Avg turnaround time: %d\n\n\n", turnaround_time_avg);
-        } // display average values for all processes in term_q
-        else{ // pid != 0
-            while(curr != NULL){    // search term_q for PID match
-                if(curr->p->pid == pid){
-                    print_process_info(curr->p);
-                    printf("[%d] Evaluation\n", pid);
-                    printf("--------------------\n");
-                    printf("Wait time in ready queue: %d\n", curr->p->ready_wait_time);
-                    printf("Turnaround time: %d\n\n\n", curr->p->turnaround_time);
-                    printf("Arrival time: %d\n", curr->p->arrival_time);
-                    printf("Finish time: %d\n", curr->p->finish_time);
-                    printf("CPU burst time: %d\n", curr->p->cpu_burst_init);
-                    printf("Priority: %d\n", curr->p->priority);
-                    break;  // break out of while(curr != NULL)
-                }
-                curr = curr->right;
-            }
-            if(curr == NULL){
-                printf("Error: PID not found\n\n\n");
-            }
-        } // else: display evaluation info for process with pid
-    }
-}
-
-
 int CPU(Table* tbl, int algo){
     // schedule a Process to execute
 
@@ -342,7 +274,6 @@ int CPU(Table* tbl, int algo){
         case 1: // SJF
             if(tbl->running_p == NULL){
                 tbl->running_p = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
-                // log message
                 if(tbl->running_p != NULL){
                     printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
                     tbl->running_p->state = 2; // running
@@ -351,6 +282,34 @@ int CPU(Table* tbl, int algo){
                 else{
                     printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
                     return -1;
+                }
+            }
+            break;
+        
+        case 2: // preemptive SJF
+            Process* out = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
+            if(out == NULL){
+                if(tbl->running_p == NULL){
+                    printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
+                    return -1;
+                }
+                // else: keep running_p
+            }
+            else{
+                if(tbl->running_p == NULL){
+                    tbl->running_p = out;
+                    printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                    tbl->running_p->state = 2; // running
+                    dequeue(tbl->ready_q, tbl->running_p);
+                }
+                else if(tbl->running_p->cpu_burst_rem > out->cpu_burst_rem){   // preempt running_p with out
+                    printf("<@%d> PREEMPT: [%d] to CPU, [%d] to ready queue", tbl->clk, out->pid, tbl->running_p->pid);
+                    printf("\tRemaining time: [%d]: %d, [%d]: %d\n", out->pid, out->cpu_burst_rem, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
+                    tbl->running_p->state = 1;  // preempt  to ready
+                    enqueue(tbl->ready_q, tbl->running_p);
+                    tbl->running_p = out;
+                    tbl->running_p->state = 2;  // running
+                    dequeue(tbl->ready_q, tbl->running_p);
                 }
             }
             break;
@@ -472,6 +431,74 @@ void print_queue(Queue *q){
 }
 
 
+void evaluate(Table* tbl){
+    /*
+    Display evaluation info/metrics for the process in term_q
+    with the provided `pid`
+    if pid=0, it will display average values for all processes
+    in the term_q
+    
+    TODO: modify to return an eval struct type which contain
+    time related attributes for all processes + avg + sums,
+    which can be searched up with user input.
+
+     */
+    int pid;    // -1: exit, 0: avg, 1~: PID
+    Queue* term_q = tbl->term_q;
+
+    // take user input for pid
+    while(pid != -1){
+        printf("<<Enter PID to evaluate (0: average, -1: exit)>>\n");
+        printf("PID: ");
+        scanf(" %d", &pid); // consume newline
+        printf("--------------------------------------\n");
+        Node* curr = term_q->head;
+        if(pid == -1){break;}
+        if(pid==0){
+            int ready_wait_time_sum = 0;
+            int turnaround_time_sum = 0;
+            // int io_wait_time_sum = 0;
+            // int total_wait_time_sum = 0;
+
+            while(curr != NULL){
+                ready_wait_time_sum += curr->p->ready_wait_time;
+                turnaround_time_sum += curr->p->turnaround_time;
+                // io_wait_time_sum += curr->p->io_wait_time;
+                // total_wait_time_sum += curr->p->total_wait_time;
+                curr = curr->right;
+            }
+
+            int num_process = term_q->cnt;
+            int ready_wait_time_avg = ready_wait_time_sum / num_process;
+            int turnaround_time_avg = turnaround_time_sum / num_process;
+
+            printf("Avg wait time: %d\n", ready_wait_time_avg);
+            printf("Avg turnaround time: %d\n\n\n", turnaround_time_avg);
+        } // display average values for all processes in term_q
+        else{ // pid != 0
+            while(curr != NULL){    // search term_q for PID match
+                if(curr->p->pid == pid){
+                    print_process_info(curr->p);
+                    printf("[%d] Evaluation\n", pid);
+                    printf("--------------------\n");
+                    printf("Wait time in ready queue: %d\n", curr->p->ready_wait_time);
+                    printf("Turnaround time: %d\n\n\n", curr->p->turnaround_time);
+                    printf("Arrival time: %d\n", curr->p->arrival_time);
+                    printf("Finish time: %d\n", curr->p->finish_time);
+                    printf("CPU burst time: %d\n", curr->p->cpu_burst_init);
+                    printf("Priority: %d\n", curr->p->priority);
+                    break;  // break out of while(curr != NULL)
+                }
+                curr = curr->right;
+            }
+            if(curr == NULL){
+                printf("Error: PID not found\n\n\n");
+            }
+        } // else: display evaluation info for process with pid
+    }
+}
+
+
 int main(){
     // set test init
     Config cfg = {
@@ -481,9 +508,9 @@ int main(){
         .rand_cpu_burst = true,
         .rand_io_burst = true,
         .num_process = 10,
-        .algo = 0
+        .algo = 2
     };
-    srand(99);
+    srand(98);
     
 
     // create an empty table. (empty new_pool, ready, wait, term queues are created. CLK <-- 0)
@@ -503,13 +530,7 @@ int main(){
         // add processes that arrived to ready_queue
         arrived_to_ready(tbl, cfg.num_process);
 
-        // run CPU --> 
-        // 1. scheduler() will ...
-        // ... assign a new process to CPU (was NULL/idle) (dequeue from ready_q)
-        // ... assign new process to CPU (preempted running process) (dequeue from ready_q)
-        // ... keep the old process in CPU
-        // 2. compute running_p for 1 CLK
-        // 3. if running_p is finished, move it to term_q
+        // schedule, compute, enqueue, dequeue processes
         CPU(tbl, cfg.algo);
         
         // check if all processes are terminated

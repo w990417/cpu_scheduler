@@ -99,16 +99,16 @@ Queue* create_queue(int priority);
 void arrived_to_ready(Table* tbl, int count);
 void enqueue(Queue* q, Process* p);
 void dequeue(Queue* q, Process* p);
-
-void print_process_info(Process *p);
-void print_queue(Queue *q);
-
 void update_wait_time(Table* tbl);
-void evaluate(Table* tbl);
 
 int CPU(Table* tbl, int algo);
 Process* _FCFS(Queue* q);
 Process* _SJF(Queue* q);
+
+void print_process_info(Process *p);
+void print_queue(Queue *q);
+void evaluate(Table* tbl);
+
 
 #endif  // CPU_SCHEDULER_H
 
