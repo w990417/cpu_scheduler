@@ -1,13 +1,16 @@
 CURRENT TASK:
 
-just finished rewriting CPU()
-scheduler() is removed
-prio_q is not used anymore (use ready_q instead)
+
+
 
 NEXT TASK:
-preemptive SJF.
+round robin
 
 
+
+FINISHED TASK:
+_PRIO() implemented
+priority with or without preemption tested and working
 
 
 TODO: 

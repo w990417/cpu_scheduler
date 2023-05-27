@@ -89,20 +89,13 @@ Process* _create_process(Config *cfg){
     return new_process; // return pointer to new process
 }
 
-Queue* create_queue(int priority){
+Queue* create_queue(){
     /*
-    Create an empty Queue
-    
-    Parameters
-    ----------
-    int priority: priority of the queue (0, 1~4)
-        if priority is 0, the queue does not use priority
-    
+    Create an empty Queue 
     */
     Queue *new_queue = (Queue*)malloc(sizeof(Queue));
     new_queue->head = NULL;
     new_queue->tail = NULL;
-    new_queue->priority = priority;
     new_queue->cnt = 0;
 
     return new_queue;
@@ -151,12 +144,6 @@ void enqueue(Queue *q, Process *p){
     /*
     Create/allocate a new Node and assign a process to it
     */
-    
-    // assert q->priority == p->priority
-    if(q->priority != p->priority){
-        printf("Error: Process priority does not match Queue's Priority\n");
-        exit(1);
-    }
 
     Node *new_node = (Node*)malloc(sizeof(Node));
     new_node->p = p;
@@ -255,7 +242,7 @@ void update_wait_time(Table* tbl){
 
 int CPU(Table* tbl, int algo){
     // schedule a Process to execute
-
+    Process* out;   // return of _SJF() or _PRIO()
     switch(algo){
         case 0: // FCFS
             if(tbl->running_p == NULL){
@@ -287,7 +274,7 @@ int CPU(Table* tbl, int algo){
             break;
         
         case 2: // preemptive SJF
-            Process* out = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
+            out = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
             if(out == NULL){
                 if(tbl->running_p == NULL){
                     printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
@@ -303,8 +290,8 @@ int CPU(Table* tbl, int algo){
                     dequeue(tbl->ready_q, tbl->running_p);
                 }
                 else if(tbl->running_p->cpu_burst_rem > out->cpu_burst_rem){   // preempt running_p with out
-                    printf("<@%d> PREEMPT: [%d] to CPU, [%d] to ready queue", tbl->clk, out->pid, tbl->running_p->pid);
-                    printf("\tRemaining time: [%d]: %d, [%d]: %d\n", out->pid, out->cpu_burst_rem, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
+                    printf("<@%d> PREEMPT: [%d] (%d clk) to CPU, [%d] (%d clk) to ready queue",
+                           tbl->clk, out->pid, out->cpu_burst_rem, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
                     tbl->running_p->state = 1;  // preempt  to ready
                     enqueue(tbl->ready_q, tbl->running_p);
                     tbl->running_p = out;
@@ -313,6 +300,45 @@ int CPU(Table* tbl, int algo){
                 }
             }
             break;
+        case 3: // priority w/o preemption
+            if(tbl->running_p == NULL){
+                tbl->running_p = _PRIO(tbl->ready_q, NULL);
+                if(tbl->running_p == NULL){
+                    printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
+                    return -1;
+                }
+                else{
+                    printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                    tbl->running_p->state = 2; // running
+                    dequeue(tbl->ready_q, tbl->running_p);}
+            }
+            break;
+
+        case 4: // priority w/ preemption
+            out = _PRIO(tbl->ready_q, tbl->running_p);
+            if(out == NULL){
+                printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
+                return -1;
+            }
+            
+            if(tbl->running_p == NULL){
+                tbl->running_p = out;
+                printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                tbl->running_p->state = 2; // running
+                dequeue(tbl->ready_q, tbl->running_p);
+            }
+
+            if(out != tbl->running_p){  // Premption: `out` replaces running_p
+                printf("<@%d> PREEMPT: [%d] (%d clk) to CPU, [%d] (%d clk) to ready queue\n",
+                       tbl->clk, out->pid, out->cpu_burst_rem, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
+                tbl->running_p->state = 1;  // preempt  to ready queue
+                enqueue(tbl->ready_q, tbl->running_p);
+                tbl->running_p = out;
+                tbl->running_p->state = 2;  // running
+                dequeue(tbl->ready_q, tbl->running_p);  // remove `out` from ready queue
+            }    
+            break;
+
         default:
             printf("Error: CPU() algo not implemented\n");
             exit(1);
@@ -380,6 +406,38 @@ Process* _SJF(Queue* q){
 }
 
 
+Process* _PRIO(Queue* q, Process* running_p){
+    /*
+    Priority Scheduling: Returns Process* with the highest priority
+
+    
+    Process* running_p: currently running process
+    */
+
+    // check if ready queue is empty
+    if(q->head == NULL){
+        return running_p;   // empty ready queue. Keep running_p. IDLE if running_p == NULL
+    }
+    
+    // max_priority = -1 if no running_p
+    int running_priority = (running_p == NULL) ? -1 : running_p->priority;
+    int max_priority = running_priority;
+    Node* curr = q->head;
+    Node* max_node = q->head;
+
+    // seek ready queue
+    while(curr != NULL){
+        if(curr->p->priority > max_priority){
+            max_node = curr;
+            max_priority = curr->p->priority;
+        }
+        curr = curr->right;
+    }
+
+    // only preempt if ready queue has a Process with higher priority than running_p
+    return (max_priority > running_priority) ? max_node->p : running_p;
+}
+
 void print_process_info(Process* p){
     // prints process attributes (except time related attributes for evaluation)
     printf("\n[%d] Process Info\n==============\n", p->pid);
@@ -418,8 +476,7 @@ void print_queue(Queue *q){
     }
 
     // print queue info
-    printf("Queue Priority: %d\n", q->priority);
-    printf("Processes in queue: %d\n", q->cnt);
+    printf("Processes Count: %d\n", q->cnt);
     
     // print queue
     Node *curr = q->head;
@@ -504,11 +561,11 @@ int main(){
     Config cfg = {
         .rand_pid = true,
         .rand_arrival = true,
-        .use_priority = false,
+        .use_priority = true,
         .rand_cpu_burst = true,
         .rand_io_burst = true,
         .num_process = 10,
-        .algo = 2
+        .algo = 4
     };
     srand(98);
     

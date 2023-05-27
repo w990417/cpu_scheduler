@@ -46,7 +46,6 @@ typedef struct Queue{
     /* One dimensional queue (linked list) with no priority*/
     struct Node *head;
     struct Node *tail;
-    int priority;       // 1~MAX_PRIORITY where 1 is the highest. If priority=0, then it is not used.
     int cnt;
 }Queue;
 
@@ -94,7 +93,7 @@ typedef struct Config{
 Process** create_process(Config *cfg);
 Process* _create_process(Config *cfg);
 Table* create_table(Config *cfg);
-Queue* create_queue(int priority);
+Queue* create_queue();
 
 void arrived_to_ready(Table* tbl, int count);
 void enqueue(Queue* q, Process* p);
@@ -104,6 +103,7 @@ void update_wait_time(Table* tbl);
 int CPU(Table* tbl, int algo);
 Process* _FCFS(Queue* q);
 Process* _SJF(Queue* q);
+Process* _PRIO(Queue* q, Process* running_p);
 
 void print_process_info(Process *p);
 void print_queue(Queue *q);
