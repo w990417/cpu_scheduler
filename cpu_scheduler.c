@@ -114,6 +114,7 @@ Table* create_table(Config *cfg){
     new_table->term_q = create_queue(0);
     new_table->running_p = NULL;
     new_table->clk = 0;
+    new_table->quantum = cfg->quantum;
 
     return new_table;
 }
@@ -240,7 +241,30 @@ void update_wait_time(Table* tbl){
 }
 
 
-int CPU(Table* tbl, int algo){
+int CPU(Table* tbl, int algo, int _quantum){
+    /* CPU()
+    1. Schedule: select a Process to execute according to the scheduling algorithm specified by `algo`
+        - Returns -1 if there is no Process to execute (IDLE)
+    2. Compute: CPU burst for 1 CLK
+    3. Check if running_p is finished
+        - Returns 0 if running_p is finished
+        - Returns running_p->cpu_burst_rem if running_p is not finished
+    
+    Parameters
+    ----------
+    Table* tbl: tbl keeps track of all queues, running process, current time and other options required for scheduling
+
+    int algo: specifies the scheduling algorithm to be used
+        0: FCFS
+        1: SJF w/o preemption
+        2: SJF w/ preemption
+        3: Priority w/o preemption
+        4: Priority w/ preemption
+        5: Round Robin - identical time quantum, no priority, always preempt
+     */
+    
+    
+    
     // schedule a Process to execute
     Process* out;   // return of _SJF() or _PRIO()
     switch(algo){
@@ -333,10 +357,27 @@ int CPU(Table* tbl, int algo){
             }    
             break;
         case 5: // Round Robin: identical time quantum, no priority, always preempt
+            if(tbl->quantum == 0){
+                printf("<@%d> RR-EXPIRE: [%d] (%d clk) to ready queue\n",
+                       tbl->clk, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
+                tbl->running_p->state = 1; // preempt to ready queue
+                enqueue(tbl->ready_q, tbl->running_p);
+                tbl->running_p = NULL;
+            }
+            if(tbl->running_p == NULL){
+                tbl->running_p = _PRIO(tbl->ready_q, NULL);
+                if(tbl->running_p == NULL){
+                    printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
+                    return -1;
+                }
+                else{
+                    printf("<@%d> RR-DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                    tbl->quantum = _quantum;    // reset quantum
+                    tbl->running_p->state = 2; // running
+                    dequeue(tbl->ready_q, tbl->running_p);
+                }
+            }
             break;
-
-
-
         default:
             printf("Error: CPU() algo not implemented\n");
             exit(1);
@@ -344,6 +385,9 @@ int CPU(Table* tbl, int algo){
 
     // 2. Compute: CPU burst for 1 CLK
     tbl->running_p->cpu_burst_rem--;
+    if(algo == 5){
+        tbl->quantum--;
+    }
 
     // if running_p is finished
     if(tbl->running_p->cpu_burst_rem == 0){
@@ -550,7 +594,8 @@ int main(){
         .rand_cpu_burst = true,
         .rand_io_burst = true,
         .num_process = 10,
-        .algo = 0
+        .algo = 5,
+        .quantum = 5
     };
     srand(98);
     
@@ -573,7 +618,7 @@ int main(){
         arrived_to_ready(tbl, cfg.num_process);
 
         // schedule, compute, enqueue, dequeue processes
-        CPU(tbl, cfg.algo);
+        CPU(tbl, cfg.algo, cfg.quantum);
         
         // check if all processes are terminated
         if(tbl->term_q->cnt == cfg.num_process){

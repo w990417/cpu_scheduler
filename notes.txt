@@ -1,10 +1,10 @@
 CURRENT TASK:
-adapt _PRIO() for FCFS
+implement I/O burst.
 
 
 
 NEXT TASK:
-round robin
+
 
 
 

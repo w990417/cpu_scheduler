@@ -50,13 +50,14 @@ typedef struct Queue{
 }Queue;
 
 typedef struct Table{
-    /* Collection of Queue's */
+    /* Status Table */
     Process** new_pool;     // new
     struct Queue* ready_q;  // ready
     struct Queue* wait_q;   // waiting/blocked
     struct Queue* term_q;   // terminated
     Process* running_p;     // Process currently running
     int clk;                // current time
+    int quantum;            // time quantum for RR
 }Table;
 
 
@@ -86,7 +87,9 @@ typedef struct Config{
 
     int num_process;    // number of processes to generate
 
-    int algo;           // 0: FCFS, 1: SJF,
+    int algo;           // 0: FCFS, 1: SJF, 2: SJF w/ preemption, 3: PRIO w/o preemption, 4: PRIO w/ preemption, 5: RR
+
+    int quantum;        // quantum for RR
 }Config;
 
 // function prototypes
@@ -100,7 +103,7 @@ void enqueue(Queue* q, Process* p);
 void dequeue(Queue* q, Process* p);
 void update_wait_time(Table* tbl);
 
-int CPU(Table* tbl, int algo);
+int CPU(Table* tbl, int algo, int _quantum);
 Process* _SJF(Queue* q);
 Process* _PRIO(Queue* q, Process* running_p);
 
