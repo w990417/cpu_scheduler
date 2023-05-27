@@ -101,7 +101,6 @@ void dequeue(Queue* q, Process* p);
 void update_wait_time(Table* tbl);
 
 int CPU(Table* tbl, int algo);
-Process* _FCFS(Queue* q);
 Process* _SJF(Queue* q);
 Process* _PRIO(Queue* q, Process* running_p);
 

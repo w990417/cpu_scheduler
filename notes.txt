@@ -1,16 +1,11 @@
 CURRENT TASK:
-
+adapt _PRIO() for FCFS
 
 
 
 NEXT TASK:
 round robin
 
-
-
-FINISHED TASK:
-_PRIO() implemented
-priority with or without preemption tested and working
 
 
 TODO: 

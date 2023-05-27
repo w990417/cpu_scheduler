@@ -245,18 +245,16 @@ int CPU(Table* tbl, int algo){
     Process* out;   // return of _SJF() or _PRIO()
     switch(algo){
         case 0: // FCFS
-            if(tbl->running_p == NULL){
-                tbl->running_p = _FCFS(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
-                if(tbl->running_p != NULL){
-                    printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
-                    tbl->running_p->state = 2; // running
-                    dequeue(tbl->ready_q, tbl->running_p);             
-                }
-                else{
+            if(tbl->running_p == NULL){ // only schedule if there is no running process.
+                tbl->running_p = _PRIO(tbl->ready_q, NULL);
+                if(tbl->running_p == NULL){
                     printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
                     return -1;
                 }
-            }
+                printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                tbl->running_p->state = 2; // running
+                dequeue(tbl->ready_q, tbl->running_p);
+            } // else: keep running_p
             break;           
         case 1: // SJF
             if(tbl->running_p == NULL){
@@ -271,8 +269,7 @@ int CPU(Table* tbl, int algo){
                     return -1;
                 }
             }
-            break;
-        
+            break;     
         case 2: // preemptive SJF
             out = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
             if(out == NULL){
@@ -313,21 +310,18 @@ int CPU(Table* tbl, int algo){
                     dequeue(tbl->ready_q, tbl->running_p);}
             }
             break;
-
         case 4: // priority w/ preemption
             out = _PRIO(tbl->ready_q, tbl->running_p);
             if(out == NULL){
                 printf("<@%d> IDLE: CPU has no Process available to execute.\n", tbl->clk);
                 return -1;
-            }
-            
+            }        
             if(tbl->running_p == NULL){
                 tbl->running_p = out;
                 printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
                 tbl->running_p->state = 2; // running
                 dequeue(tbl->ready_q, tbl->running_p);
             }
-
             if(out != tbl->running_p){  // Premption: `out` replaces running_p
                 printf("<@%d> PREEMPT: [%d] (%d clk) to CPU, [%d] (%d clk) to ready queue\n",
                        tbl->clk, out->pid, out->cpu_burst_rem, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
@@ -338,6 +332,10 @@ int CPU(Table* tbl, int algo){
                 dequeue(tbl->ready_q, tbl->running_p);  // remove `out` from ready queue
             }    
             break;
+        case 5: // Round Robin: identical time quantum, no priority, always preempt
+            break;
+
+
 
         default:
             printf("Error: CPU() algo not implemented\n");
@@ -366,19 +364,6 @@ int CPU(Table* tbl, int algo){
     return tbl->running_p->cpu_burst_rem;
 }
 
-
-Process* _FCFS(Queue* q){
-    /* 
-    Returns the first (leftmost) process in the queue.
-    */
-
-    // check if ready queue is empty
-    if(q->head == NULL){
-        return NULL;    // CPU() will be IDLE
-    }
-
-    return q->head->p;
-}
 
 
 Process* _SJF(Queue* q){
@@ -561,11 +546,11 @@ int main(){
     Config cfg = {
         .rand_pid = true,
         .rand_arrival = true,
-        .use_priority = true,
+        .use_priority = false,
         .rand_cpu_burst = true,
         .rand_io_burst = true,
         .num_process = 10,
-        .algo = 4
+        .algo = 0
     };
     srand(98);
     
