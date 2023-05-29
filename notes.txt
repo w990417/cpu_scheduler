@@ -1,7 +1,13 @@
 CURRENT TASK:
-implement I/O burst.
+implement I/O burst
+current details:
+ - only one i/o burst per process
+ - only one i/o device (waiting queue) --> no preemption from waiting queue or during i/o burst
+ - i/o burst must be processed at once and without preemption (interruption)
+ - io_burst_start: # of cpu cycles after which i/o must be serviced (decrements by 1. if 0, i/o burst starts)
 
-
+if you change io_service(), `tbl->io_p->io_burst_start` to something else, multiple bursts can be implemented
+ - currently, io_burst_start is set to -1 when i/o burst is done.
 
 NEXT TASK:
 

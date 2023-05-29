@@ -28,11 +28,11 @@ typedef struct Process{
     int priority;        // 1~MAX_PRIORITY=4 where 1 is the highest priority and default is 3
     
     int cpu_burst_init;  // initial cpu_burst_time
-    int io_burst_init;   // initial io_burst_time
-    int cpu_burst_rem;  // remaining cpu burst
-    int io_burst_rem;   // remaining io burst
+    int cpu_burst_rem;   // remaining cpu burst
     int arrival_time;    // 0 ~ MAX_ARRIVAL_TIME, default is global process_cnt
-    
+    int io_burst_start;  // # of cpu bursts after which io must be performed (1 ~ cpu_burst_init -1)
+    int io_burst_rem;    // remaining io burst. Up to 1/2 of cpu burst time (1 ~ cpu_burst_init/2)
+
     // for evaluation()
     int ready_wait_time;
     int io_wait_time;
@@ -56,6 +56,7 @@ typedef struct Table{
     struct Queue* wait_q;   // waiting/blocked
     struct Queue* term_q;   // terminated
     Process* running_p;     // Process currently running
+    Process* io_p;          // Process currently performing io
     int clk;                // current time
     int quantum;            // time quantum for RR
 }Table;
@@ -104,6 +105,7 @@ void dequeue(Queue* q, Process* p);
 void update_wait_time(Table* tbl);
 
 int CPU(Table* tbl, int algo, int _quantum);
+Process* io_service(Table* tbl, int algo);
 Process* _SJF(Queue* q);
 Process* _PRIO(Queue* q, Process* running_p);
 
