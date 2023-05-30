@@ -36,7 +36,6 @@ typedef struct Process{
     // for evaluation()
     int ready_wait_time;
     int io_wait_time;
-    int total_wait_time;
     int turnaround_time;
     int finish_time;
 }Process;
@@ -112,7 +111,10 @@ Process* _PRIO(Queue* q, Process* running_p);
 
 void print_process_info(Process *p);
 void print_queue(Queue *q);
-void evaluate(Table* tbl);
+void evaluate(Table* tbl, int algo);
+
+void display_config(Config* cfg);
+void edit_config(Config* cfg);
 
 
 #endif  // CPU_SCHEDULER_H

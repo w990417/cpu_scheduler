@@ -47,27 +47,22 @@ Process* _create_process(Config *cfg){
     -------
     Process *new_process: pointer to new process with attributes...
     
-    ... pid: (Config.rand_pid=true) 1001 ~ 9999
-             (Config.rand_pid=false) 1 ~ 99 (NOT IMPLEMENTED YET)
+    ... pid: 1001 ~ 9999
     
-    ... arrival_time: (Config.rand_arrival=true) 0 ~ MAX_ARRIVAL_TIME (20)
-                      (Config.rand_arrival=false) CLK (current time)
-    
+    ... arrival_time: 0 ~ MAX_ARRIVAL_TIME (20)
+
     ... priority: (Config.use_priority=true) 1 ~ MAX_PRIORITY (4)
                   (Config.use_priority=false) DEFAULT_PRIORITY (0: PRIORITY NOT USED)
     
-    ... cpu_burst_time: (Config.rand_cpu_burst=true) 1 ~ MAX_CPU_BURST (20)
-                        (Config.rand_cpu_burst=false) DEFAULT_CPU_BURST (10)
+    ... cpu_burst_init: 1 ~ MAX_CPU_BURST (20)
 
     ... io_burst_start: number of CPU burst cycles before I/O must be processed. Decrements by 1 every CPU burst.
                         I/O must be processed when io_burst_start == 0
-        (Config.rand_io_burst=true) (1 ~ cpu_burst_init-1): 
-        (Config.rand_io_burst=false) DEFAULT_IO_START (1)
+                        if CPU burst is 1, no io burst
 
-    ... io_burst_rem: (Config.rand_io_burst=true) (1 ~ cpu_burst_init/2): number of I/O burst cycles remaining
-                      (Config.rand_io_burst=false) DEFAULT_IO_BURST (2)
+    ... io_burst_rem: (1 ~ cpu_burst_init/2) number of I/O burst cycles remaining (0 if cpu burst is 1)
 
-    ... state: 0=new {1=ready, 2=running, 3=waiting, 4=terminated}
+    ... state: 0=new, 1=ready, 2=running, 3=waiting, 4=terminated
     
     ... time related attributes are initialised to 0
      */
@@ -80,15 +75,19 @@ Process* _create_process(Config *cfg){
     new_process->priority = cfg->use_priority ? rand()%MAX_PRIORITY + 1 : DEFAULT_PRIORITY;
     new_process->cpu_burst_init = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
     new_process->cpu_burst_rem = new_process->cpu_burst_init;
-    new_process->io_burst_start = cfg->rand_io_burst ? rand()%(new_process->cpu_burst_init-1) + 1 : DEFAULT_IO_START;
-    new_process->io_burst_rem = cfg->rand_io_burst ? rand()%(new_process->cpu_burst_init/2) + 1 : DEFAULT_IO_BURST;
-    
+    if(new_process->cpu_burst_init == 1){
+        new_process->io_burst_start = -1;
+        new_process->io_burst_rem = 0;
+    }
+    else{
+        new_process->io_burst_start = cfg->rand_io_burst ? rand()%(new_process->cpu_burst_init-1) + 1 : DEFAULT_IO_START;
+        new_process->io_burst_rem = cfg->rand_io_burst ? rand()%(new_process->cpu_burst_init/2) + 1 : DEFAULT_IO_BURST;
+    }
     new_process->state = 0; // new
 
     // time related attributes are initialised to -1
     new_process->ready_wait_time = 0;
     new_process->io_wait_time = 0;
-    new_process->total_wait_time = 0;
     new_process->turnaround_time = 0;
     new_process->finish_time = 0;
 
@@ -341,8 +340,8 @@ int CPU(Table* tbl, int algo, int _quantum){
                     printf("<@%d> IDLE: CPU and I/O are idle\n", tbl->clk);
                     return -1;  // CPU and I/O IDLE: running_p == NULL
                 }
+                // DISPATCH
                 tbl->running_p = tbl->ready_q->head->p;
-                // log message: DISPATCH
                 printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
                 tbl->running_p->state = 2;  // running
                 dequeue(tbl->ready_q, tbl->running_p);   
@@ -423,49 +422,48 @@ int CPU(Table* tbl, int algo, int _quantum){
                 dequeue(tbl->ready_q, tbl->running_p);  // remove `out` from ready queue
             }    
             break;
-        case 5: // Round Robin: identical time quantum, no priority, always preempt
-            if(tbl->running_p == NULL){
-                if(tbl->ready_q->head == NULL){
+        case 5: // Round Robin: identical time quantum, no priority, always preempt, renew quantum if no process in ready queue
+            if(tbl->ready_q->head == NULL){ // empty ready queue
+                if(tbl->running_p == NULL){
                     // log message: IDLE
-                    printf("<@%d> IDLE: CPU is idle\n", tbl->clk);
+                    printf("<@%d> IDLE: CPU idle\n", tbl->clk);
                     return -1;
                 }
-                tbl->running_p = tbl->ready_q->head->p;
-                tbl->running_p->state = 2;  // running
-                tbl->quantum = _quantum;
-                dequeue(tbl->ready_q, tbl->running_p);
-                printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
-            }
-            else{
-                
-            }
-            
-            
-            
-            /*  if(tbl->quantum == 0){
-                printf("<@%d> RR-EXPIRE: [%d] (%d clk) to ready queue\n",
-                       tbl->clk, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
-                tbl->running_p->state = 1; // preempt to ready queue
-                enqueue(tbl->ready_q, tbl->running_p);
-                tbl->running_p = NULL;
+                if(tbl->quantum == 0){
+                    // no other process to replace running_p --> renew quantum for running_p
+                    printf("<@%d> RR-RENEW: [%d] (%d clk) has no other process to replace it.\n", tbl->clk, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
+                    tbl->quantum = _quantum;    // reset quantum
+                    break;
+                }
             }
             if(tbl->running_p == NULL){
-                tbl->running_p = _PRIO(tbl->ready_q, NULL);
-                if(tbl->running_p == NULL){
-                    break;  // CPU is IDLE
-                }
-                else{
-                    printf("<@%d> RR-DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                tbl->running_p = tbl->ready_q->head->p; // first process in ready queue
+                printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
+                tbl->running_p->state = 2; // running
+                dequeue(tbl->ready_q, tbl->running_p);
+                tbl->quantum = _quantum;    // reset quantum
+            }
+            else{   // tbl->running_p is not finished
+                if(tbl->quantum == 0){  // quantum expired
+                    out = tbl->ready_q->head->p;
+                    printf("<@%d> RR-SWITCH: [%d] (%d clk) to CPU, ", tbl->clk, out->pid, out->cpu_burst_rem);
+                    printf("[%d] (%d clk) to ready queue\n", tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
+                    
+                    tbl->running_p->state = 1;  // preempt  to ready queue
+                    enqueue(tbl->ready_q, tbl->running_p);
+                    
+                    tbl->running_p = out;
+                    tbl->running_p->state = 2;  // running
+                    dequeue(tbl->ready_q, tbl->running_p);  // remove `out` from ready queue
+
                     tbl->quantum = _quantum;    // reset quantum
-                    tbl->running_p->state = 2; // running
-                    dequeue(tbl->ready_q, tbl->running_p);
                 }
-            } */
+            }
             break;
         default:
             printf("Error: CPU() algo not implemented\n");
             exit(1);
-    }   // tbl->running_p is either NULL or a Process to execute
+    }
 
 
     if(tbl->running_p == NULL){
@@ -478,6 +476,7 @@ int CPU(Table* tbl, int algo, int _quantum){
     if(algo == 5){tbl->quantum--;}  // if Round Robin 
     // compute CPU burst
     tbl->running_p->cpu_burst_rem--;
+    // check if running_p is finished
     if(tbl->running_p->cpu_burst_rem == 0){
         printf("<@%d> TERMINATE: [%d] to term queue \n", tbl->clk, tbl->running_p->pid);
         tbl->running_p->state = 4; // terminated
@@ -492,6 +491,7 @@ int CPU(Table* tbl, int algo, int _quantum){
     }
     // I/O countdown
     tbl->running_p->io_burst_start--;
+    // check if I/O must be serviced
     if(tbl->running_p->io_burst_start == 0){
         // log message: WAIT
         printf("<@%d> WAIT: [%d] (%d I/O clk) to wait queue\n", tbl->clk, tbl->running_p->pid, tbl->running_p->io_burst_rem);
@@ -597,7 +597,7 @@ Process* _PRIO(Queue* q, Process* running_p){
 }
 
 void print_process_info(Process* p){
-    // prints process attributes (except time related attributes for evaluation)
+    // to be used after create_process()
     printf("\n[%d] Process Info\n==============\n", p->pid);
     switch (p->state) {
         case 0:
@@ -619,11 +619,11 @@ void print_process_info(Process* p){
             printf("State: unknown\n");
             break;
     }
+    printf("Arrival_time: %d\n", p->arrival_time);
     printf("Priority: %d\n", p->priority);
     printf("CPU Burst Time (Initial): %d\n", p->cpu_burst_init);
-    printf("I/O Burst Initial Time: %d\n", p->io_burst_rem);
+    printf("I/O Burst Time (Initial): %d\n", p->io_burst_rem);
     printf("I/O Burst Start Time: %d\n", p->io_burst_start);
-    printf("Arrival_time: %d\n\n", p->arrival_time);
 }
 
 
@@ -633,7 +633,6 @@ void print_queue(Queue *q){
         printf("Queue is empty\n");
         return;
     }
-
     // print queue info
     printf("Processes Count: %d\n", q->cnt);
     
@@ -647,27 +646,20 @@ void print_queue(Queue *q){
 }
 
 
-void evaluate(Table* tbl){
+void evaluate(Table* tbl, int algo){
     /*
     Display evaluation info/metrics for the process in term_q
     with the provided `pid`
-    if pid=0, it will display average values for all processes
-    in the term_q
-    
-    TODO: modify to return an eval struct type which contain
-    time related attributes for all processes + avg + sums,
-    which can be searched up with user input.
-
+    if pid=0, it will display overview
+    if pid=-1, it will exit evaluation mode
      */
-    int pid;    // -1: exit, 0: avg, 1~: PID
+    int pid;
     Queue* term_q = tbl->term_q;
 
-    printf("\n\n==============\n");
-    printf("<<Evaluation>>\n");
-    printf("\n\n==============\n");
+    printf("\n\n====START EVALUATION====\n");
     // take user input for pid
     while(pid != -1){
-        printf("<<Enter PID to evaluate (0: average, -1: exit)>>\n");
+        printf("<<Enter PID to evaluate (0: overview, -1: restart, -2: exit)>>\n");
         printf("PID: ");
         scanf(" %d", &pid); // consume newline
         printf("--------------------------------------\n");
@@ -676,16 +668,20 @@ void evaluate(Table* tbl){
             printf("\nExiting evaluation...\n");
             break;
         }
-        if(pid==0){ // average
+        else if(pid == -2){
+            printf("\nExiting program...\n");
+            exit(0);
+        }
+        if(pid==0){ // overview
             int ready_wait_time_sum = 0;
             int io_wait_time_sum = 0;
             int turnaround_time_sum = 0;
-            int total_wait_time_sum = 0;
+            int wait_time_sum = 0;
 
             int ready_wait_time_avg = 0;
             int io_wait_time_avg = 0;
             int turnaround_time_avg = 0;
-            int total_wait_time_avg = 0;
+            int wait_time_avg = 0;
             int num_process = term_q->cnt;
 
             while(curr != NULL){
@@ -694,34 +690,50 @@ void evaluate(Table* tbl){
                 turnaround_time_sum += curr->p->turnaround_time;
                 curr = curr->right;
             }
-            total_wait_time_sum = ready_wait_time_sum + io_wait_time_sum;
+            wait_time_sum = ready_wait_time_sum + io_wait_time_sum;
             
             ready_wait_time_avg = ready_wait_time_sum / num_process;
             io_wait_time_avg = io_wait_time_sum / num_process;
             turnaround_time_avg = turnaround_time_sum / num_process;
-            total_wait_time_avg = total_wait_time_sum / num_process;
-            
-            printf("Number of Processes: %d\n", num_process);
-            printf("Ready queue wait time (total, avg): %d, %d\n", ready_wait_time_sum, ready_wait_time_avg);
-            printf("I/O wait time (total, avg): %d, %d\n", io_wait_time_sum, io_wait_time_avg);
-            printf("Total wait time (total, avg): %d, %d\n", total_wait_time_sum, total_wait_time_avg);
-            printf("Turnaround time (total, avg): %d, %d\n", turnaround_time_sum, turnaround_time_avg);
-
+            wait_time_avg = wait_time_sum / num_process;
+            switch (algo) {
+                case 0:
+                    printf("Algorithm: FCFS\n");
+                    break;
+                case 1:
+                    printf("Algorithm: SJF\n");
+                    break;
+                case 2:
+                    printf("Algorithm: SRTF (SJF with preemption)\n");
+                    break;
+                case 3:
+                    printf("Algorithm: Priority (no preemption)\n");
+                    break;
+                case 4:
+                    printf("Algorithm: Preemptive Priority\n");
+                    break;
+                case 5:
+                    printf("Algorithm: Round Robin\n");
+                    break;
+            }
+            printf("Task Finished at %d\n\n", tbl->clk);
             printf("Terminated Queue:\n");
             print_queue(term_q);
-        } // display average values for all processes in term_q
+            printf("\nWait time: total=%d, avg=%d\n", wait_time_sum, wait_time_avg);
+            printf("Ready queue wait time: total=%d, avg=%d\n", ready_wait_time_sum, ready_wait_time_avg);
+            printf("Wait queue wait time: total=%d, avg=%d\n", io_wait_time_sum, io_wait_time_avg);
+            printf("Turnaround time: total=%d, avg=%d\n\n\n", turnaround_time_sum, turnaround_time_avg);
+        }
         else{ // pid != 0
             while(curr != NULL){    // search term_q for PID match
                 if(curr->p->pid == pid){
-                    print_process_info(curr->p);
                     printf("[%d] Evaluation\n", pid);
                     printf("--------------------\n");
-                    printf("Wait time in ready queue: %d\n", curr->p->ready_wait_time);
-                    printf("Turnaround time: %d\n\n\n", curr->p->turnaround_time);
-                    printf("Arrival time: %d\n", curr->p->arrival_time);
-                    printf("Finish time: %d\n", curr->p->finish_time);
-                    printf("CPU burst time: %d\n", curr->p->cpu_burst_init);
-                    printf("Priority: %d\n", curr->p->priority);
+                    printf("Wait time: %d (ready: %d, wait:%d)\n",
+                    curr->p->ready_wait_time + curr->p->io_wait_time, curr->p->ready_wait_time, curr->p->io_wait_time);
+                    printf("Turnaround time: %d (Arrive:%d, Terminate:%d)\n",
+                    curr->p->turnaround_time, curr->p->arrival_time, curr->p->finish_time);
+                    printf("Priority: %d\n\n\n", curr->p->priority);
                     break;  // break out of while(curr != NULL)
                 }
                 curr = curr->right;
@@ -734,55 +746,138 @@ void evaluate(Table* tbl){
 }
 
 
-int main(){
-    // set test init
-    Config cfg = {
-        .rand_pid = true,
-        .rand_arrival = true,
-        .use_priority = false,
-        .rand_cpu_burst = true,
-        .rand_io_burst = true,
-        .num_process = 5,
-        .algo = 5,  // 0: FCFS, 1: SJF, 2: SRTF, 3: Priority, 4: Preemptive Priority, 5: RR
-        .quantum = 5
-    };
-    srand(98);
-    
-
-    // create an empty table. (empty new_pool, ready, wait, term queues are created. CLK <-- 0)
-    Table *tbl = create_table(&cfg);
-    
-    // create processes, store them in new_pool (tbl->new_pool)
-    tbl->new_pool = create_process(&cfg);
-
-    // print process info
-    for(int i=0; i<cfg.num_process; i++){
-        print_process_info(tbl->new_pool[i]);
-    }
-
-    // loop
-    while(tbl->clk < 150){
-        // add processes that arrived to ready_queue
-        arrived_to_ready(tbl, cfg.num_process);
-        wait_to_ready(tbl, cfg.algo);
-        // schedule, compute, enqueue, dequeue processes
-        io_service(tbl, cfg.algo);
-        CPU(tbl, cfg.algo, cfg.quantum);
-        
-        // check if all processes are terminated
-        if(tbl->term_q->cnt == cfg.num_process){
-            printf("<@%d> COMPLETE: All processes are terminated\n", tbl->clk);
+void display_config(Config* cfg){
+    /* prints Config */
+    printf("\n\n==============\n");
+    printf("<<Config>>\n");
+    printf("==============\n");
+    printf("Number of processes: %d\n", cfg->num_process);
+    printf("Scheduling algorithm: ");
+    switch (cfg->algo) {
+        case 0:
+            printf("FCFS\n");
             break;
-        }
-        
-        // increment wait time for all processes in wait queue
-        update_wait_time(tbl);
-
-        tbl->clk++;
+        case 1:
+            printf("SJF\n");
+            break;
+        case 2:
+            printf("SRTF (SJF with preemption)\n");
+            break;
+        case 3:
+            printf("Priority (no preemption)\n");
+            break;
+        case 4:
+            printf("Preemptive Priority\n");
+            break;
+        case 5:
+            printf("Round Robin\n");
+            printf("Time quantum: %d\n", cfg->quantum);
+            break;
     }
-    // test evalutate per pid
-    evaluate(tbl);
+    printf("\n\n");
+}
 
+
+void edit_config(Config* cfg){
+    display_config(cfg);
+    printf("\n\n<<Edit Config?>> (y/n) : ");
+    char c;
+    scanf(" %c", &c);
+
+    if(c == 'y'){
+        printf("\n<<Edit Config>>\n\n");
+        printf("<<Enter number of processes>> (MAX=20): ");
+        scanf(" %d", &cfg->num_process);
+        printf("\n<<Enter scheduling algorithm>> (0~5)\n");
+        printf("0: FCFS, 1: SJF, 2: SRTF, 3: Priority, 4: Preemptive Priority, 5: Round Robin\n");
+        printf("Algorithm: ");
+        scanf(" %d", &cfg->algo);
+        if(cfg->algo == 5){
+            printf("<<Enter time quantum>> (default=5): ");
+            scanf(" %d", &cfg->quantum);
+        }
+        // use priority?
+        if(cfg->algo == 3 || cfg->algo == 4){
+            cfg->use_priority = true;
+        }
+        else{
+            cfg->use_priority = false;
+        }
+        // random seed?
+        printf("\n<<Use random seed?>> (y/n): ");
+        scanf(" %c", &c);
+        if(c == 'y'){
+            printf("\n<<Enter random seed>> (int 1~99): ");
+            int seed;
+            scanf(" %d", &seed);
+            srand(seed);
+        }
+        printf("\n<<Config updated>>\n");
+        display_config(cfg);
+    }
+    else{
+        printf("\n\n<<Using default config>>\n");
+    }
+}
+
+
+int main(){
+    while(1){
+        // set default config
+        srand(98);
+        Config cfg = {
+            .rand_pid = true,   // can't modify
+            .rand_arrival = true,   // can't modify
+            .use_priority = false,
+            .rand_cpu_burst = true, // can't modify
+            .rand_io_burst = true,  // can't modify
+            .num_process = 5,
+            .algo = 5,  // 0: FCFS, 1: SJF, 2: SRTF, 3: Priority, 4: Preemptive Priority, 5: RR
+            .quantum = 5
+        };
+        
+        // take user input for config
+        edit_config(&cfg);
+
+        // create an empty table. (empty new_pool, ready, wait, term queues are created. CLK <-- 0)
+        Table *tbl = create_table(&cfg);
+        
+        // create processes, store them in new_pool (tbl->new_pool)
+        tbl->new_pool = create_process(&cfg);
+
+        
+        printf("\n\n====TASK START====\n");
+        // print process info
+        printf("\n\n====Created Processes====\n");
+        for(int i=0; i<cfg.num_process; i++){
+            print_process_info(tbl->new_pool[i]);
+        }
+
+
+        printf("\n\n====LOGS====\n");
+        // loop
+        while(tbl->clk < MAX_TIME){
+            // add processes that arrived to ready_queue
+            arrived_to_ready(tbl, cfg.num_process);
+            wait_to_ready(tbl, cfg.algo);
+            // schedule, compute, enqueue, dequeue processes
+            io_service(tbl, cfg.algo);
+            CPU(tbl, cfg.algo, cfg.quantum);
+            
+            // check if all processes are terminated
+            if(tbl->term_q->cnt == cfg.num_process){
+                printf("<@%d> COMPLETE: All processes are terminated\n====LOG END====\n", tbl->clk);
+                break;
+            }
+            
+            // increment wait time for all processes in wait queue
+            update_wait_time(tbl);
+
+            tbl->clk++;
+        }
+        // test evalutate per pid
+        evaluate(tbl, cfg.algo);
+    }
     return 0;
 }
 
