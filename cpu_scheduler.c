@@ -133,9 +133,9 @@ Table* create_table(Config *cfg){
 
     Table *new_table = (Table*)malloc(sizeof(Table));   
     new_table->new_pool = NULL; // create_process() will create/allocate new_pool
-    new_table->ready_q = create_queue(0);
-    new_table->wait_q = create_queue(0);
-    new_table->term_q = create_queue(0);
+    new_table->ready_q = create_queue();
+    new_table->wait_q = create_queue();
+    new_table->term_q = create_queue();
     new_table->running_p = NULL;
     new_table->io_p = NULL;
     new_table->clk = 0;
@@ -158,7 +158,9 @@ void arrived_to_ready(Table* tbl, int count){
     for(int i=0; i<count; i++){
         if(new_pool[i]->arrival_time == tbl->clk){
             // log message
-            printf("<@%d> ARRIVE: [%d] to ready queue\n", tbl->clk, new_pool[i]->pid);
+            if(tbl->ready_q->head != NULL){
+                printf("<@%d> ARRIVE: [%d] to ready queue\n", tbl->clk, new_pool[i]->pid);
+            }
             enqueue(ready_q, new_pool[i]);
             new_pool[i]->state = 1; // ready
         }
@@ -253,7 +255,7 @@ void update_wait_time(Table* tbl){
     Queue* ready_q = tbl->ready_q;
     
     if(ready_q == NULL){
-        printf("<@%d> ERROR: update_wait_time() ready queue is empty but task not over.\n");
+        printf("<@%d> ERROR: update_wait_time() ready queue is empty but task not over\n", tbl->clk);
         exit(1);
     }
 
@@ -269,21 +271,18 @@ void update_wait_time(Table* tbl){
 int CPU(Table* tbl, int algo, int _quantum){
     /* CPU()
     1. Schedule: select a Process to execute according to the scheduling algorithm specified by `algo`
-        - Returns -1 if there is no Process to execute (IDLE)
+        - if preemptive:
+            - if running_p is NULL: DISPATCH
+            - if running_p is not NULL: PREEMPT (if higher priority process in ready_q)
+        - if non-preemptive:
+            - if running_p is NULL and I/O is IDLE: DISPATCH
+            - if running_p is NULL but I/O is BUSY: WAIT
+            - if running_p is not NULL: keep running_p
     
-    2. Compute for 1 cycle (unless non-preemptive algo, and running_p is not io_p)
-        - Compute CPU burst for 1 CLK
-        - Decrement running_p->io_burst_start
+    2. Compute:
         - Decrement tbl->quantum (if algo == 5, i.e. Round Robin)
-        - I/O service (for io_p; waiting queue --> ready queue when io_burst_rem == 0)
-    3. Check if I/O must be serviced (i.e. io_burst_start == 0)
-        - If so, move running_p to wait_q and...
-            - If preemptive (algo == 2 or 4 or 5), set running_p to NULL
-            - Else, keep running_p
-    
-    4. Check if running_p is finished
-        - Returns 0 if running_p is finished
-        - Returns running_p->cpu_burst_rem if running_p is not finished
+        - Compute CPU burst for 1 CLK --> check if running_p is finished
+        - Decrement running_p->io_burst_start --> check if I/O must be serviced
     
     Parameters
     ----------
@@ -296,6 +295,12 @@ int CPU(Table* tbl, int algo, int _quantum){
         3: Priority w/o preemption
         4: Priority w/ preemption
         5: Round Robin - identical time quantum, no priority, always preempt
+
+    Returns
+    -------
+    int: -1 if CPU is IDLE
+          0 if running_p is finished (tbl->running_p == NULL)
+          else: tbl->running_p->cpu_burst_rem
      */
     
     
@@ -305,25 +310,33 @@ int CPU(Table* tbl, int algo, int _quantum){
     switch(algo){
         case 0: // FCFS
             if(tbl->running_p == NULL && tbl->io_p == NULL){
-                tbl->running_p = _PRIO(tbl->ready_q, NULL);
-                if(tbl->running_p == NULL){
-                    break;  // CPU is IDLE
+                if(tbl->ready_q->head == NULL){
+                    // log message: IDLE
+                    printf("<@%d> IDLE: CPU and I/O are idle\n", tbl->clk);
+                    return -1;  // CPU and I/O IDLE: running_p == NULL
                 }
+                tbl->running_p = tbl->ready_q->head->p;
+                // log message: DISPATCH
                 printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
-                tbl->running_p->state = 2; // running
-                dequeue(tbl->ready_q, tbl->running_p);
+                tbl->running_p->state = 2;  // running
+                dequeue(tbl->ready_q, tbl->running_p);   
             }
             break;           
-        case 1: // SJF
-            if(tbl->running_p == NULL){
-                tbl->running_p = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
-                if(tbl->running_p != NULL){
-                    printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
-                    tbl->running_p->state = 2; // running
-                    dequeue(tbl->ready_q, tbl->running_p);
+        case 1: // SJF (non-preemptive)
+            if(tbl->running_p == NULL && tbl->io_p == NULL){
+                out = _SJF(tbl->ready_q);
+                if(out == NULL){
+                    // log message: IDLE
+                    printf("<@%d> IDLE: CPU and I/O are idle\n", tbl->clk);
+                    return -1;  // CPU and I/O IDLE: running_p == NULL
                 }
+                // log message: DISPATCH
+                printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, out->pid);
+                tbl->running_p = out;
+                tbl->running_p->state = 2;  // running
+                dequeue(tbl->ready_q, tbl->running_p);
             }
-            break;     
+            break;
         case 2: // preemptive SJF
             out = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
             if(out != NULL){
@@ -347,15 +360,18 @@ int CPU(Table* tbl, int algo, int _quantum){
             // else: if out == NULL --> keep running_p whether NULL or not.
             break;
         case 3: // priority w/o preemption
-            if(tbl->running_p == NULL){
-                tbl->running_p = _PRIO(tbl->ready_q, NULL);
-                if(tbl->running_p == NULL){
-                    break;  // CPU is IDLE
+            if(tbl->running_p == NULL && tbl->io_p == NULL){
+                out = _PRIO(tbl->ready_q, NULL);
+                if(out == NULL){
+                    // log message: IDLE
+                    printf("<@%d> IDLE: CPU and I/O are idle\n", tbl->clk);
+                    return -1;  // CPU and I/O IDLE: running_p == NULL
                 }
-                else{
-                    printf("<@%d> DISPATCH: [%d] to CPU\n", tbl->clk, tbl->running_p->pid);
-                    tbl->running_p->state = 2; // running
-                    dequeue(tbl->ready_q, tbl->running_p);}
+                // log message: DISPATCH
+                printf("<@%d> DISPATCH: [%d] to CPU (priority: %d)\n", tbl->clk, out->pid, out->priority);
+                tbl->running_p = out;
+                tbl->running_p->state = 2;  // running
+                dequeue(tbl->ready_q, tbl->running_p);
             }
             break;
         case 4: // priority w/ preemption
@@ -407,81 +423,91 @@ int CPU(Table* tbl, int algo, int _quantum){
     }   // tbl->running_p is either NULL or a Process to execute
 
 
-    if(tbl->running_p == NULL && tbl->io_p == NULL){
-        printf("<@%d> CPU is IDLE\n", tbl->clk);
+    if(tbl->running_p == NULL){
+        // waiting for I/O
         return -1;
     }
 
-    // running_p compute
-    if(tbl->running_p != NULL){
-        if(algo == 5){tbl->quantum--;}  // decrement quantum if Round Robin 
-        tbl->running_p->cpu_burst_rem--;
-        if(tbl->running_p->cpu_burst_rem == 0){
-            printf("<@%d> TERMINATE: [%d] to term queue \n", tbl->clk, tbl->running_p->pid);
-            tbl->running_p->state = 4; // terminated
-            tbl->running_p->finish_time = tbl->clk;
-            tbl->running_p->turnaround_time =
-            (tbl->running_p->finish_time - tbl->running_p->arrival_time);
-            
-            enqueue(tbl->term_q, tbl->running_p);   // create Node at term
-            
-            tbl->running_p = NULL;
-            return 0;
-        }
+    // 2. compute
+    if(algo == 5){tbl->quantum--;}  // if Round Robin 
+    // compute CPU burst
+    tbl->running_p->cpu_burst_rem--;
+    if(tbl->running_p->cpu_burst_rem == 0){
+        printf("<@%d> TERMINATE: [%d] to term queue \n", tbl->clk, tbl->running_p->pid);
+        tbl->running_p->state = 4; // terminated
+        tbl->running_p->finish_time = tbl->clk;
+        tbl->running_p->turnaround_time =
+        (tbl->running_p->finish_time - tbl->running_p->arrival_time);
         
-        tbl->running_p->io_burst_start--;
-        if(tbl->running_p->io_burst_start == 0){
-            // log message
-            if(tbl->wait_q->head != NULL){
-                printf("<@%d> TO WAIT QUEUE: [%d] (%d I/O clk)\n", tbl->clk, tbl->running_p->pid, tbl->running_p->io_burst_rem);
-            }   // else: io_service() will log I/O START message
-            tbl->running_p->state = 3; // waiting
-            enqueue(tbl->wait_q, tbl->running_p);
-            tbl->running_p = NULL;
-        }     
+        enqueue(tbl->term_q, tbl->running_p);   // create Node at term
+        
+        tbl->running_p = NULL;
+        return 0;
     }
-    return -1;
+    // I/O countdown
+    tbl->running_p->io_burst_start--;
+    if(tbl->running_p->io_burst_start == 0){
+        // log message
+        if(tbl->wait_q->head != NULL){
+            printf("<@%d> TO WAIT QUEUE: [%d] (%d I/O clk)\n", tbl->clk, tbl->running_p->pid, tbl->running_p->io_burst_rem);
+        }   // else: io_service() will log I/O START message
+        tbl->running_p->state = 3; // waiting
+        enqueue(tbl->wait_q, tbl->running_p);
+        tbl->running_p = NULL;
+        return -1;
+    }     
+    
+    return tbl->running_p->cpu_burst_rem;
 }
 
 
-Process* io_service(Table* tbl, int algo){
+int io_service(Table* tbl, int algo){
     /* Service I/O burst for 1 clock cycle
-    If io_p is NULL, select a Process from wait_q to perform I/O,
-    if wait_q is also empty, return NULL.
+    1. Schedule: If io_p is NULL, select a Process from wait_q to perform I/O,
+        - if wait_q is also empty, return NULL.
 
-    If io_p is not NULL, decrement io_burst_rem by 1.
-    When I/O is complete, either move io_p to ready_q (if preemptive algo)
-    or move io_p to running_p (if non-preemptive algo)
+    2. I/O service: decrement io_burst_rem by 1
+        - if io_burst_rem == 0, move io_p to ready queue
+        - if io_burst_rem > 0, return NULL
+
+    Returns
+    -------
+    -1 if no process available to perform I/O
+    0 if I/O burst is completed (tbl->io_p == NULL)
+    else: remaining I/O burst time
      */
-    
+    // 1. Schedule
     if(tbl->io_p == NULL){
         if(tbl->wait_q->head == NULL){
-            return NULL;    // no process available to perform I/O
+            return -1;    // no process available to perform I/O
         }
         else{
             tbl->io_p = tbl->wait_q->head->p;
+            printf("<@%d> I/O START: [%d] (%d I/O clock)\n", tbl->clk, tbl->io_p->pid, tbl->io_p->io_burst_rem);
             dequeue(tbl->wait_q, tbl->io_p);
-            printf("<@%d> I/O START: [%d] (%d I/O clk)\n", tbl->clk, tbl->io_p->pid, tbl->io_p->io_burst_rem);
             tbl->io_p->state = 3;   // waiting
         }
     }
-    
+    // 2. I/O service
     tbl->io_p->io_burst_rem--;
     if(tbl->io_p->io_burst_rem == 0){
         if(algo == 2 || algo==4 || algo==5){    // if preemptive, move io_p to ready queue
-            printf("<@%d> I/O complete: [%d] to ready queue\n", tbl->clk, tbl->io_p->pid);
+            printf("<@%d> READY: [%d] I/O Complete\n", tbl->clk, tbl->io_p->pid);
             tbl->io_p->io_burst_start = -1; // only perform I/O once
             tbl->io_p->state = 1;   // ready
             enqueue(tbl->ready_q, tbl->io_p);
             tbl->io_p = NULL;
+            return 0;
         }
         else{   // if non-preemptive, running_p = io_p
-            printf("<@%d> I/O COMPLETE\n<@%d> DISPATCH [%d] to CPU\n", tbl->clk, tbl->clk, tbl->io_p->pid);
+            printf("<@%d> DISPATCH: [%d] I/O Complete\n", tbl->clk, tbl->io_p->pid);
             tbl->io_p->state = 2;   // running
             tbl->running_p = tbl->io_p;
             tbl->io_p = NULL;
+            return 0;
         }
     }
+    return tbl->io_p->io_burst_rem;
 }
 
 
@@ -688,7 +714,6 @@ int main(){
     }
 
     // loop
-    
     while(tbl->clk < 150){
         // add processes that arrived to ready_queue
         arrived_to_ready(tbl, cfg.num_process);
