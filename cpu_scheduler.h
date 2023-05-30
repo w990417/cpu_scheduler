@@ -100,6 +100,7 @@ Table* create_table(Config *cfg);
 Queue* create_queue();
 
 void arrived_to_ready(Table* tbl, int count);
+void wait_to_ready(Table* tbl, int algo);
 void enqueue(Queue* q, Process* p);
 void dequeue(Queue* q, Process* p);
 void update_wait_time(Table* tbl);
