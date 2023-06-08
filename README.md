@@ -89,8 +89,3 @@
         refer to "3.Report"
 
 ## 3. Report
-
-<br>
-
-## 4. Notes/Extra
-Nuitka (nuitka=1.5.7; python=3.9) is used for complex functions to translate Python code into C.

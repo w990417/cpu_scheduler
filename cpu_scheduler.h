@@ -26,14 +26,16 @@ typedef struct Process{
     int pid;             // 1001 ~ 9999
     int state;           // 0=new, 1=ready, 2=running, 3=waiting, 4=terminated
     int priority;        // 1~MAX_PRIORITY=4 where 1 is the highest priority and default is 3
-    int cpu_burst_time;  // remaining cpu burst
-    int io_burst_time;   // remaining io burst
-    int arrival_time;    // 0 ~ MAX_ARRIVAL_TIME, default is global process_cnt
     
+    int cpu_burst_init;  // initial cpu_burst_time
+    int cpu_burst_rem;   // remaining cpu burst
+    int arrival_time;    // 0 ~ MAX_ARRIVAL_TIME, default is global process_cnt
+    int io_burst_start;  // # of cpu bursts after which io must be performed (1 ~ cpu_burst_init -1)
+    int io_burst_rem;    // remaining io burst. Up to 1/2 of cpu burst time (1 ~ cpu_burst_init/2)
+
     // for evaluation()
     int ready_wait_time;
     int io_wait_time;
-    int total_wait_time;
     int turnaround_time;
     int finish_time;
 }Process;
@@ -43,19 +45,19 @@ typedef struct Queue{
     /* One dimensional queue (linked list) with no priority*/
     struct Node *head;
     struct Node *tail;
-    int priority;       // 1~MAX_PRIORITY where 1 is the highest. If priority=0, then it is not used.
     int cnt;
 }Queue;
 
 typedef struct Table{
-    /* Collection of Queue's */
+    /* Status Table */
     Process** new_pool;     // new
     struct Queue* ready_q;  // ready
     struct Queue* wait_q;   // waiting/blocked
     struct Queue* term_q;   // terminated
-    struct Queue** prio_q;  // priority queues (queue of queues)
     Process* running_p;     // Process currently running
+    Process* io_p;          // Process currently performing io
     int clk;                // current time
+    int quantum;            // time quantum for RR
 }Table;
 
 
@@ -84,20 +86,36 @@ typedef struct Config{
     bool rand_io_burst; // false: (default) fixed to DEFAULT_IO_BURST for all processes                   
 
     int num_process;    // number of processes to generate
+
+    int algo;           // 0: FCFS, 1: SJF, 2: SJF w/ preemption, 3: PRIO w/o preemption, 4: PRIO w/ preemption, 5: RR
+
+    int quantum;        // quantum for RR
 }Config;
 
 // function prototypes
 Process** create_process(Config *cfg);
 Process* _create_process(Config *cfg);
 Table* create_table(Config *cfg);
-Queue* create_queue(int priority);
+Queue* create_queue();
+
 void arrived_to_ready(Table* tbl, int count);
-void enqueue(Queue *q, Process *p);
+void wait_to_ready(Table* tbl, int algo);
+void enqueue(Queue* q, Process* p);
+void dequeue(Queue* q, Process* p);
+void update_wait_time(Table* tbl);
+
+int CPU(Table* tbl, int algo, int _quantum);
+int io_service(Table* tbl, int algo);
+Process* _SJF(Queue* q);
+Process* _PRIO(Queue* q, Process* running_p);
+
 void print_process_info(Process *p);
 void print_queue(Queue *q);
-Process* scheduler(Table* tbl, int algo);
-Process* _FCFS();
-int CPU(Table* tbl);
+void evaluate(Table* tbl, int algo, int gannt_size);
+void print_gannt_chart(int gannt_size);
+
+void display_config(Config* cfg);
+void edit_config(Config* cfg);
 
 
 #endif  // CPU_SCHEDULER_H

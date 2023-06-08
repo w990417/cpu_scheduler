@@ -1,12 +1,53 @@
-<REMINDER>
-TODO-next: cpu_scheduler.c(379): to_term_q()
-- move finished process to term_q and calculate evaluation metrics (time related attributes)
-- update queue counts etc.
+CURRENT TASK:
+implement I/O burst
+current details:
+ - only one i/o burst per process
+ - only one i/o device (waiting queue) --> no preemption from waiting queue or during i/o burst
+ - i/o burst must be processed at once and without preemption (interruption)
+ - io_burst_start: # of cpu cycles after which i/o must be serviced (decrements by 1. if 0, i/o burst starts)
+
+if you change io_service(), `tbl->io_p->io_burst_start` to something else, multiple bursts can be implemented
+ - currently, io_burst_start is set to -1 when i/o burst is done.
+
+NEXT TASK:
 
 
-<NOTES>
+
+
+TODO: 
+<0524>-----------------------------------------------------------------------------
+struct Eval
+evaluate(): modify to return an eval struct type which contain
+    time related attributes for all processes + avg + sums,
+    which can be searched up with user input.
+
+<0525>
+global var `log` and `log_idx`
+ - log: array of strings
+ - log_idx: index of log array
+
+e.g:
+void addToLog(const char* message) {
+  strncpy(log[nextLogEntry], message, sizeof(log[nextLogEntry]) - 1);
+  log[nextLogEntry][sizeof(log[nextLogEntry]) - 1] = '\0';  // Ensure null-termination
+  nextLogEntry++;
+}
+>> addToLog("[PID: 9441] is scheduled at clk=5");
+
+print_log() function
+<0524>-----------------------------------------------------------------------------
+
+
+<0526>-----------------------------------------------------------------------------
+modify enqueue() to take in states as well
+    - enqueue(Queue*, Process*, int from_state, int to_state)
+how to use enqueue for new_pool which is not a queue? ... just keep using arrived_to_ready()..?
+<0526>-----------------------------------------------------------------------------
+
+
+MISCELLANEOUS NOTES:
 *malloc on ...
-=============
+==============
 create_process() --> (Process**) new_pool
 _create_process() --> (Process*) new processes
 
@@ -18,6 +59,10 @@ create_queue() --> (Queue*) new queues
 
 enqueue() --> (Node*) new_node
 
+
+*free on ...
+============
+dequeue() --> (Node*) Node of the process that is dequeued
 
 
 * when implementing I/O ...
@@ -35,23 +80,44 @@ when the process is running or i/o-waiting..?
 
 
 
-* list of checks to run on each CLK cycle
+* CLK cycle ...
 ==========================================
-[finished check]
-- check if new_pool is empty AND term_q count == num_process --> done. Stop loop.
-- check if there are new arrivals in new_pool --> enqueue() to ready_q
 
-[running_p check]
-- update burst time (cpu_burst, io_burst) of running_p (and i/o waiting when implemented)
-- check running_p (and i/o waiting when implemented) --> if done, terminate and enqueue() to term_q
-- check if running_p is NULL --> scheduler() assigns a new process to running_p
-    - if scheduler() returns NULL, (but not done yet) --> idle time. (increment idle_time if implement)
+--- CLK=t ---
 
-[update time related stuff for all processes]
-- update waiting time of all processes in ready_q (ready_wait_time++)
+[arrival check]: arrive @ CLK=t
 
-[running_p check]
-- update burst time (cpu_burst, io_burst) of running_p (and i/o waiting when implemented)
-- check running_p (and i/o waiting when implemented) --> if done, terminate and enqueue() to term_q
-- check if running_p is NULL --> scheduler() assigns a new process to running_p
-    - if scheduler() returns NULL, (but not done yet) --> idle time. (increment idle_time if implement)
+[CPU schedule] (scheduler() called)
+ - if running_p is NULL: scheduler() returns a process to run on CPU
+ - if running_p is not NULL: scheduler() returns running_p (no change), or preempt running_p with a new process
+ - if running_p is still NULL: CPU idle
+
+[CPU compute]: compute for 1 CLK cycle (CLK=t)
+
+[CPU check]: check if process is done
+ - true: terminate process (finished @ CLK=t)
+ - false: do nothing (keep process)
+
+[All done check]: check if all processes are done
+ - true: finished @ CLK=t
+ - false: ready queue wait time incremented --> waited during CLK=t
+
+[CPU check]: check if process should be preempted
+ - TODO: preemption not implemented yet
+ 
+update CLK=t+1
+
+--- CLK=t+1 ---
+
+<0526>
+CPU() should schedule the process itself.
+
+FCFS : check ready queue --> return most recent
+
+SJF no preempt: check ready queue --> return shortest
+SJF preempt: check ready queue and running_p --> return shortest
+
+Priority no preempt: check rady queue --> return highest priority
+Priority preempt: check ready queue and running_p --> return highest priority
+
+RR: TODO
