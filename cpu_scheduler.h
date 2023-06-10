@@ -25,7 +25,7 @@ typedef struct Process{
     // initial data
     int pid;             // 1001 ~ 9999
     int state;           // 0=new, 1=ready, 2=running, 3=waiting, 4=terminated
-    int priority;        // 1~MAX_PRIORITY=4 where 1 is the highest priority and default is 3
+    int priority;        // 1~MAX_PRIORITY=4 (0: PRIORITY NOT USED)
     
     int cpu_burst_init;  // initial cpu_burst_time
     int cpu_burst_rem;   // remaining cpu burst
@@ -75,16 +75,8 @@ typedef struct Node{
 
 
 typedef struct Config{
-    bool rand_pid;      // false: (default) increments from 1001
-                        // true: random (1001 ~ 9999)
-    bool rand_arrival;  // false: (default) increments from 0
-                        // true: random (0 ~ MAX_ARRIVAL_TIME)
-    bool use_priority; // false: (default) set to DEFAULT_PRIORITY for all processes (0: PRIORITY NOT USED)
-                        // true: random (1 ~ MAX_PRIORITY)
-    bool rand_cpu_burst;// false: (default) fixed to DEFAULT_CPU_BURST for all processes
-                        // true: random (1 ~ MAX_CPU_BURST)
-    bool rand_io_burst; // false: (default) fixed to DEFAULT_IO_BURST for all processes                   
-
+    bool use_priority;  // false: (default) set to DEFAULT_PRIORITY for all processes (0: PRIORITY NOT USED)
+                        // true: random (1 ~ MAX_PRIORITY)                  
     int num_process;    // number of processes to generate
 
     int algo;           // 0: FCFS, 1: SJF, 2: SJF w/ preemption, 3: PRIO w/o preemption, 4: PRIO w/ preemption, 5: RR
@@ -100,14 +92,14 @@ Queue* create_queue();
 
 void arrived_to_ready(Table* tbl, int count);
 void wait_to_ready(Table* tbl, int algo);
-void enqueue(Queue* q, Process* p);
+void enqueue(Queue* q, Process* p, int at_head);
 void dequeue(Queue* q, Process* p);
 void update_wait_time(Table* tbl);
 
 int CPU(Table* tbl, int algo, int _quantum);
 int io_service(Table* tbl, int algo);
-Process* _SJF(Queue* q);
-Process* _PRIO(Queue* q, Process* running_p);
+Process* _SJF(Queue* q, int preemptive);
+Process* _PRIO(Queue* q, Process* running_p, int preemptive);
 
 void print_process_info(Process *p);
 void print_queue(Queue *q);

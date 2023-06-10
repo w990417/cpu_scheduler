@@ -26,11 +26,23 @@ Process** create_process(Config *cfg){
     Creates a number of processes as specified and returns a job pool */
     
     int count = cfg->num_process;
+    int pid_list[MAX_PROCESS] = {0};
     Process **new_pool = (Process**) malloc(sizeof(Process*)*count);
-    
+    Process *new_process;
+
     // create processes and store them in new_pool
     for(int i=0; i<count; i++){
-        new_pool[i] = _create_process(cfg);
+        new_process = _create_process(cfg);
+        // check if pid already exists
+        for(int j=0; j<i; j++){
+            if(new_process->pid == pid_list[j]){
+                new_process->pid = rand()%8999 + 1001;
+                j = -1;
+            }
+        }
+
+        new_pool[i] = new_process;
+        pid_list[i] = new_process->pid;
     }
     
     return new_pool;
@@ -72,17 +84,17 @@ Process* _create_process(Config *cfg){
     
 
     new_process->pid = rand()%8999 + 1001; // 1001 ~ 9999
-    new_process->arrival_time = cfg->rand_arrival ? rand()%MAX_ARRIVAL_TIME + 1 : 0;
+    new_process->arrival_time = rand()%MAX_ARRIVAL_TIME + 1;
     new_process->priority = cfg->use_priority ? rand()%MAX_PRIORITY + 1 : DEFAULT_PRIORITY;
-    new_process->cpu_burst_init = cfg->rand_cpu_burst ? rand()%MAX_CPU_BURST + 1 : DEFAULT_CPU_BURST;
+    new_process->cpu_burst_init = rand()%MAX_CPU_BURST;
     new_process->cpu_burst_rem = new_process->cpu_burst_init;
     if(new_process->cpu_burst_init == 1){
         new_process->io_burst_start = -1;
-        new_process->io_burst_rem = 0;
+        new_process->io_burst_rem = -1;
     }
     else{
-        new_process->io_burst_start = cfg->rand_io_burst ? rand()%(new_process->cpu_burst_init-1) + 1 : DEFAULT_IO_START;
-        new_process->io_burst_rem = cfg->rand_io_burst ? rand()%(new_process->cpu_burst_init/2) + 1 : DEFAULT_IO_BURST;
+        new_process->io_burst_start = rand()%(new_process->cpu_burst_init-1) + 1;
+        new_process->io_burst_rem = rand()%(new_process->cpu_burst_init/2) + 1;
     }
     new_process->state = 0; // new
 
@@ -159,7 +171,7 @@ void arrived_to_ready(Table* tbl, int count){
         if(new_pool[i]->arrival_time == tbl->clk){
             // log message
             printf("<@%d> ARRIVE: [%d] arrived to ready queue\n", tbl->clk, new_pool[i]->pid);
-            enqueue(ready_q, new_pool[i]);
+            enqueue(ready_q, new_pool[i], 1);
             new_pool[i]->state = 1; // ready
         }
     }
@@ -177,22 +189,24 @@ void wait_to_ready(Table* tbl, int algo){
             printf("<@%d> I/O COMPLETE: [%d]\n", tbl->clk-1, tbl->io_p->pid);
             printf("<@%d> READY: [%d] to ready queue\n", tbl->clk, tbl->io_p->pid);
             tbl->io_p->state = 1;   // ready
-            enqueue(tbl->ready_q, tbl->io_p);
+            enqueue(tbl->ready_q, tbl->io_p, 0);
             tbl->io_p = NULL;
         }
-        else{   // if non-preemptive, running_p = io_p
+        else{   // if non-preemptive, insert at the head of ready queue
             printf("<@%d> I/O Complete: [%d]\n", tbl->clk-1, tbl->io_p->pid);
-            printf("<@%d> DISPATCH: [%d] to CPU from I/O\n", tbl->clk, tbl->io_p->pid);
-            tbl->io_p->state = 2;   // running
-            tbl->running_p = tbl->io_p;
+            printf("<@%d> READY: [%d] to CPU from I/O\n", tbl->clk, tbl->io_p->pid);
+            tbl->io_p->state = 1;   // ready
+            enqueue(tbl->ready_q, tbl->io_p, 1);
             tbl->io_p = NULL;
         }
     }
 }
 
-void enqueue(Queue *q, Process *p){
+void enqueue(Queue *q, Process *p, int at_head){
     /*
     Create/allocate a new Node and assign a process to it
+    Add the new Node to the head of the queue if at_head=1,
+    otherwise add it to the tail of the queue
     */
 
     Node *new_node = (Node*)malloc(sizeof(Node));
@@ -203,15 +217,23 @@ void enqueue(Queue *q, Process *p){
         q->tail = new_node;
         new_node->left = NULL;
         new_node->right = NULL;
-    } // queue is empty
-    else{
+        q->cnt++;
+        return;
+    }
+    if(at_head == 0){
         q->tail->right = new_node;
         new_node->left = q->tail;
         new_node->right = NULL;
         q->tail = new_node;
-    } // queue is not empty
-    q->cnt++;
-
+        q->cnt++;
+    }
+    else{
+        q->head->left = new_node;
+        new_node->right = q->head;
+        new_node->left = NULL;
+        q->head = new_node;
+        q->cnt++;
+    }
 }
 
 
@@ -352,7 +374,7 @@ int CPU(Table* tbl, int algo, int _quantum){
             break;           
         case 1: // SJF (non-preemptive)
             if(tbl->running_p == NULL && tbl->io_p == NULL){
-                out = _SJF(tbl->ready_q);
+                out = _SJF(tbl->ready_q, 0);
                 if(out == NULL){
                     gannt[tbl->clk] = -1;
                     // log message: IDLE
@@ -367,7 +389,7 @@ int CPU(Table* tbl, int algo, int _quantum){
             }
             break;
         case 2: // preemptive SJF
-            out = _SJF(tbl->ready_q);   // NULL if ready_q is empty, else returns a Process
+            out = _SJF(tbl->ready_q, 1);   // NULL if ready_q is empty, else returns a Process
             if(out != NULL){
                 if(tbl->running_p == NULL){
                     tbl->running_p = out;
@@ -379,7 +401,7 @@ int CPU(Table* tbl, int algo, int _quantum){
                     printf("<@%d> PREEMPT: DISPATCH [%d] (%d clk) to CPU, [%d] (%d clk) to ready queue\n",
                            tbl->clk, out->pid, out->cpu_burst_rem, tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
                     tbl->running_p->state = 1;  // preempt  to ready
-                    enqueue(tbl->ready_q, tbl->running_p);
+                    enqueue(tbl->ready_q, tbl->running_p, 0);
                     tbl->running_p = out;
                     tbl->running_p->state = 2;  // running
                     dequeue(tbl->ready_q, tbl->running_p);
@@ -390,7 +412,7 @@ int CPU(Table* tbl, int algo, int _quantum){
             break;
         case 3: // priority w/o preemption
             if(tbl->running_p == NULL && tbl->io_p == NULL){
-                out = _PRIO(tbl->ready_q, NULL);
+                out = _PRIO(tbl->ready_q, NULL, 0);
                 if(out == NULL){
                     gannt[tbl->clk] = -1;
                     // log message: IDLE
@@ -405,7 +427,7 @@ int CPU(Table* tbl, int algo, int _quantum){
             }
             break;
         case 4: // priority w/ preemption
-            out = _PRIO(tbl->ready_q, tbl->running_p);
+            out = _PRIO(tbl->ready_q, tbl->running_p, 1);
             if(out == NULL){
                 break; // CPU is IDLE
             }
@@ -421,7 +443,7 @@ int CPU(Table* tbl, int algo, int _quantum){
                        tbl->clk, out->pid, out->priority, out->cpu_burst_rem,
                        tbl->running_p->pid, tbl->running_p->priority ,tbl->running_p->cpu_burst_rem);
                 tbl->running_p->state = 1;  // preempt  to ready queue
-                enqueue(tbl->ready_q, tbl->running_p);
+                enqueue(tbl->ready_q, tbl->running_p, 0);
                 tbl->running_p = out;
                 tbl->running_p->state = 2;  // running
                 dequeue(tbl->ready_q, tbl->running_p);  // remove `out` from ready queue
@@ -456,7 +478,7 @@ int CPU(Table* tbl, int algo, int _quantum){
                     printf("[%d] (%d clk) to ready queue\n", tbl->running_p->pid, tbl->running_p->cpu_burst_rem);
                     
                     tbl->running_p->state = 1;  // preempt  to ready queue
-                    enqueue(tbl->ready_q, tbl->running_p);
+                    enqueue(tbl->ready_q, tbl->running_p, 0);
                     
                     tbl->running_p = out;
                     tbl->running_p->state = 2;  // running
@@ -493,7 +515,7 @@ int CPU(Table* tbl, int algo, int _quantum){
         tbl->running_p->turnaround_time =
         (tbl->running_p->finish_time - tbl->running_p->arrival_time);
         
-        enqueue(tbl->term_q, tbl->running_p);   // create Node at term
+        enqueue(tbl->term_q, tbl->running_p, 0);   // create Node at term
         
         tbl->running_p = NULL;
         return 0;
@@ -506,7 +528,7 @@ int CPU(Table* tbl, int algo, int _quantum){
         printf("<@%d> WAIT: [%d] (%d I/O clk) to wait queue\n", tbl->clk+1, tbl->running_p->pid, tbl->running_p->io_burst_rem);
         tbl->running_p->state = 3; // waiting
         tbl->running_p->io_burst_start = -1; //I/O only once
-        enqueue(tbl->wait_q, tbl->running_p);
+        enqueue(tbl->wait_q, tbl->running_p, 0);
         tbl->running_p = NULL;
         return -1;
     }     
@@ -548,9 +570,10 @@ int io_service(Table* tbl, int algo){
 }
 
 
-Process* _SJF(Queue* q){
+Process* _SJF(Queue* q, int preemptive){
     /* 
     Returns the process with the shortest CPU burst time in the queue.
+    If non-preemptive, return process with 0 I/O burst time, else return process with shortest CPU burst time.
     */
 
     // check if ready queue is empty
@@ -563,6 +586,9 @@ Process* _SJF(Queue* q){
 
     // seek ready queue
     while(curr != NULL){
+        if(preemptive == 0 && curr->p->io_burst_rem == 0){
+            return curr->p; // return process with 0 I/O burst
+        }
         if(curr->p->cpu_burst_rem < min_node->p->cpu_burst_rem){    // schedule earlier process if same cpu_burst_rem
             min_node = curr;
         }
@@ -573,7 +599,7 @@ Process* _SJF(Queue* q){
 }
 
 
-Process* _PRIO(Queue* q, Process* running_p){
+Process* _PRIO(Queue* q, Process* running_p, int preemptive){
     /*
     Priority Scheduling: Returns Process* with the highest priority
 
@@ -594,6 +620,9 @@ Process* _PRIO(Queue* q, Process* running_p){
 
     // seek ready queue
     while(curr != NULL){
+        if(preemptive == 0 && curr->p->io_burst_rem == 0){
+            return curr->p; // return process with 0 I/O burst
+        }
         if(curr->p->priority > max_priority){
             max_node = curr;
             max_priority = curr->p->priority;
@@ -871,11 +900,7 @@ int main(){
         // set default config
         srand(98);
         Config cfg = {
-            .rand_pid = true,   // can't modify
-            .rand_arrival = true,   // can't modify
             .use_priority = false,
-            .rand_cpu_burst = true, // can't modify
-            .rand_io_burst = true,  // can't modify
             .num_process = 5,
             .algo = 5,  // 0: FCFS, 1: SJF, 2: SRTF, 3: Priority, 4: Preemptive Priority, 5: RR
             .quantum = 5
